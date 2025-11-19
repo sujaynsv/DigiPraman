@@ -1,0 +1,264 @@
+openapi: 3.0.3
+info:
+  title: DigiPraman API
+  version: 0.1.0
+  description: >-
+    Minimal contract covering OTP auth, verification retrieval, evidence upload,
+    and risk analysis callbacks for the prototype backend.
+servers:
+  - url: https://api.digipraman.local/v1
+paths:
+  /auth/otp/request:
+    post:
+      summary: Request an OTP for Aadhaar-linked login
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mobile]
+              properties:
+                mobile:
+                  type: string
+                  example: "+919898989898"
+      responses:
+        "200":
+          description: OTP transaction created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  txnId:
+                    type: string
+  /auth/otp/verify:
+    post:
+      summary: Verify OTP and exchange for JWT
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [txnId, otp]
+              properties:
+                txnId:
+                  type: string
+                otp:
+                  type: string
+      responses:
+        "200":
+          description: Authenticated session
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jwt:
+                    type: string
+                  user:
+                    $ref: "#/components/schemas/User"
+  /verifications/my:
+    get:
+      summary: Get beneficiary's pending or active verifications
+      tags: [Beneficiary]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Verification cards
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VerificationSummary"
+  /evidence/upload-url:
+    post:
+      summary: Request a presigned URL to upload evidence
+      tags: [Evidence]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [verificationId, type]
+              properties:
+                verificationId:
+                  type: string
+                  format: uuid
+                type:
+                  type: string
+                  enum: [photo, video, doc]
+      responses:
+        "200":
+          description: Signed URL payload
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  presignedUrl:
+                    type: string
+                  fileKey:
+                    type: string
+  /verifications/{id}:
+    get:
+      summary: Get verification detail (evidence, risk, audit)
+      tags: [Officer]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Complete verification detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VerificationDetail"
+  /decisions:
+    post:
+      summary: Record an officer decision
+      tags: [Officer]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [verificationId, decision]
+              properties:
+                verificationId:
+                  type: string
+                  format: uuid
+                decision:
+                  type: string
+                  enum: [approve, reject, request_more, video_required]
+                notes:
+                  type: string
+      responses:
+        "200":
+          description: Decision recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Decision"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum: [beneficiary, officer, admin]
+        name:
+          type: string
+        mobile:
+          type: string
+    VerificationSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        scheme:
+          type: string
+        dueDate:
+          type: string
+          format: date-time
+        status:
+          type: string
+        riskTier:
+          type: string
+    EvidenceItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+        storageUrl:
+          type: string
+        gps:
+          type: object
+          properties:
+            lat: { type: number }
+            lon: { type: number }
+        timestamp:
+          type: string
+          format: date-time
+    RiskAnalysis:
+      type: object
+      properties:
+        risk_score:
+          type: number
+        risk_tier:
+          type: string
+        layerScores:
+          type: object
+        flags:
+          type: array
+          items:
+            type: string
+        explanation:
+          type: array
+          items:
+            type: object
+            properties:
+              layer: { type: string }
+              reason: { type: string }
+    VerificationDetail:
+      allOf:
+        - $ref: "#/components/schemas/VerificationSummary"
+        - type: object
+          properties:
+            evidence:
+              type: array
+              items:
+                $ref: "#/components/schemas/EvidenceItem"
+            riskAnalysis:
+              $ref: "#/components/schemas/RiskAnalysis"
+            auditTrail:
+              type: array
+              items:
+                type: object
+    Decision:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        verificationId:
+          type: string
+          format: uuid
+        officerId:
+          type: string
+          format: uuid
+        decision:
+          type: string
+        notes:
+          type: string

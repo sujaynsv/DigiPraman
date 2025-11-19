@@ -1,0 +1,46 @@
+{
+  "verificationId": "9c2f6c6b-5a44-4f8c-9b36-3a2be43712ef",
+  "version": "vidya-v0.3",
+  "layerScores": {
+    "quality": {
+      "quality_score": 0.82,
+      "flags": []
+    },
+    "asset_detection": {
+      "asset_match_score": 0.71,
+      "flags": ["tractor_detected"]
+    },
+    "ocr": {
+      "doc_consistency_score": 0.55,
+      "ocr_confidence": 0.88,
+      "flags": ["amount_mismatch"]
+    },
+    "fraud": {
+      "gps_mismatch_score": 0.3,
+      "duplicate_hash_flag": 0,
+      "device_reuse_score": 0.1,
+      "timing_anomaly_score": 0
+    }
+  },
+  "risk_score": 72.4,
+  "risk_tier": "officer_review",
+  "recommended_action": "manual_review",
+  "flags": [
+    "Invoice amount exceeds sanctioned amount by 12%",
+    "Evidence collected 18km away from farm location"
+  ],
+  "explanation": [
+    {
+      "layer": "ocr",
+      "reason": "Vendor invoice amount mismatch"
+    },
+    {
+      "layer": "fraud",
+      "reason": "GPS deviation greater than 15km threshold"
+    }
+  ],
+  "modelAudit": {
+    "weights_version": "risk-weights-2025-01",
+    "executed_at": "2025-11-19T05:12:44Z"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "version": "vidya-v0.3",
+  "weights": {
+    "quality_score": 0.2,
+    "asset_match_score": 0.25,
+    "doc_consistency_score": 0.2,
+    "duplicate_hash_flag": 0.1,
+    "gps_mismatch_score": 0.1,
+    "device_reuse_score": 0.05,
+    "timing_anomaly_score": 0.05,
+    "history_flag_score": 0.05
+  },
+  "thresholds": {
+    "auto_approve_max": 65,
+    "officer_review_max": 85,
+    "video_verification_min": 86
+  },
+  "routing": {
+    "0-65": "auto_approve",
+    "66-85": "officer_review",
+    "86-100": "video_verification"
+  },
+  "notes": "Weights sum to 1.0. Adjust per scheme by copying this file and updating the numeric values."
+}
