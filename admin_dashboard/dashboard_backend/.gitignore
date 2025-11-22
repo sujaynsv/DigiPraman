@@ -1,0 +1,20 @@
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments & local tooling
+.venv/
+venv/
+ENV/
+env/
+.vscode/
+.idea/
+
+# Environment secrets
+.env
+*.env
+
+# Build artifacts & logs
+build/
+dist/
+*.log

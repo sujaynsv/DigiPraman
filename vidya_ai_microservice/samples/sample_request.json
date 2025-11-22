@@ -1,0 +1,41 @@
+{
+  "case_id": "CASE-VIDYA-001",
+  "asset_images": [
+    {
+      "id": "asset-img-1",
+      "url": "http://127.0.0.1:9000/media/tractor.jpg",
+      "declared_asset_type": "tractor"
+    }
+  ],
+  "doc_images": [
+    {
+      "id": "doc-img-1",
+      "url": "http://127.0.0.1:9000/media/invoice.jpg",
+      "document_type": "invoice"
+    }
+  ],
+  "videos": [],
+  "metadata": {
+    "case_id": "CASE-VIDYA-001",
+    "applicant_id": "APPLICANT-123",
+    "declared_loan_amount": 250000,
+    "declared_asset_type": "tractor",
+    "declared_vendor": "Agri Supplies",
+    "declared_invoice_amount": 245000,
+    "declared_invoice_date": "2025-01-05T00:00:00Z",
+    "submission_device_id": "device-abc",
+    "submission_location": {
+      "lat": 17.438139,
+      "lon": 78.39583
+    },
+    "declared_asset_location": {
+      "lat": 17.438139,
+      "lon": 78.39583
+    },
+    "applicant_history": {
+      "previous_rejections": 0,
+      "fraudulent_flags": 0,
+      "submitted_cases": 1
+    }
+  }
+}
