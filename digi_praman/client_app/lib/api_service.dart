@@ -6,7 +6,8 @@ class ApiService {
   // For iOS Simulator: use localhost
   // For Android Emulator: use 10.0.2.2
   // For physical device: use your computer's IP address
-static const String baseUrl = 'http://192.168.0.5:8000';
+static const String baseUrl = 'https://d238e4368bc6.ngrok-free.app';
+
   
   // Test connection
   Future<Map<String, dynamic>> testConnection() async {
