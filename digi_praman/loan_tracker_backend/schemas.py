@@ -138,3 +138,101 @@ class UserFilterParams(PaginationParams):
     org_id: Optional[UUID] = None
     role: Optional[RoleType] = None
     status: Optional[str] = None
+
+
+class OTPRequest(BaseModel):
+    mobile: str
+
+class OTPVerifyRequest(BaseModel):
+    mobile: str
+    otp: str
+
+
+from decimal import Decimal
+from datetime import date
+
+class LoanApplicationResponse(BaseModel):
+    id: UUID
+    loan_ref_no: str
+    loan_type: Optional[str] = None
+    sanctioned_amount: Optional[Decimal] = None
+    next_emi_date: Optional[date] = None
+    purpose: Optional[str] = None
+    lifecycle_status: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+from typing import List
+class LoanSummaryResponse(BaseModel):
+    user_name: str
+    active_loans_count: int
+    pending_verification_count: int
+    loans: List[LoanApplicationResponse]
+
+    class Config:
+        from_attributes = True
+
+class UserUpdate(BaseModel):
+    name: Optional[str] = None
+    mobile: Optional[str] = None   # we simply won't send this from UI
+    email: Optional[EmailStr] = None
+    role: Optional[RoleType] = None
+    locale: Optional[str] = None
+    status: Optional[str] = None
+
+from pydantic import BaseModel
+from typing import Optional, List
+from datetime import datetime
+from uuid import UUID
+
+class EvidenceCreate(BaseModel):
+    evidence_type: str  # 'asset_photo' or 'document'
+    requirement_type: str
+    file_name: str
+    file_path: str
+    file_type: str
+    file_size_bytes: int
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    capture_address: Optional[str] = None
+
+class EvidenceResponse(BaseModel):
+    id: UUID
+    loan_application_id: UUID
+    evidence_type: str
+    requirement_type: str
+    file_name: str
+    file_path: str
+    file_type: str
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    capture_address: Optional[str] = None
+    captured_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class VerificationStatus(BaseModel):
+    loan_ref_no: str
+    asset_photos_count: int
+    documents_count: int
+    asset_photos_complete: bool
+    documents_complete: bool
+    can_submit: bool
+
+
+class EvidenceListItem(BaseModel):
+    id: UUID
+    evidence_type: str
+    requirement_type: str
+    file_name: str
+    file_type: str
+    file_size_bytes: int
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    capture_address: Optional[str] = None
+    captured_at: datetime
+
+    class Config:
+        from_attributes = True

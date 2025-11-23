@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 import models
 import schemas
 from sqlalchemy.orm import Session
@@ -177,3 +178,248 @@ def delete_device(db: Session, device_id: UUID) -> bool:
         db.commit()
         return True
     return False
+
+from twilio.rest import Client
+import os
+
+client = Client(os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
+TWILIO_PHONE_NUMBER = os.getenv("TWILIO_PHONE_NUMBER")
+
+def send_sms(to: str, body: str):
+    message = client.messages.create(
+        body=body,
+        from_=TWILIO_PHONE_NUMBER,
+        to=to
+    )
+    return message.sid
+
+import random
+
+def generate_otp_code() -> str:
+    # Generate a 6-digit random OTP as a string
+    return f"{random.randint(100000, 999999)}"
+
+
+from models import OTP
+def create_otp(db: Session, mobile: str):
+    otp_code = generate_otp_code()
+    expires = datetime.utcnow() + timedelta(minutes=5)
+    otp = OTP(mobile=mobile, otp_code=otp_code, expires_at=expires)
+    db.add(otp)
+    db.commit()
+    db.refresh(otp)
+    # Send SMS with OTP
+    send_sms(
+        to=mobile, 
+        body=f"Your verification code is {otp_code}. It will expire in 5 minutes."
+    )
+    return otp
+
+from datetime import datetime
+from models import OTP
+from sqlalchemy.orm import Session
+
+def verify_otp(db: Session, mobile: str, otp_code: str) -> bool:
+    otp = (
+        db.query(OTP)
+        .filter(
+            OTP.mobile == mobile,
+            OTP.verified == False,
+            OTP.expires_at > datetime.utcnow()
+        )
+        .order_by(OTP.created_at.desc())
+        .first()
+    )
+    if otp and otp.otp_code == otp_code:
+        otp.verified = True
+        db.commit()
+        return True
+    return False
+
+def get_loans_for_mobile(
+    db: Session,
+    mobile: str,
+    skip: int = 0,
+    limit: int = 20
+) -> List[models.LoanApplication]:
+    return (
+        db.query(models.LoanApplication)
+        .join(models.User, models.LoanApplication._beneficiary_id == models.User.id)
+        .filter(models.User.mobile == mobile)
+        .order_by(models.LoanApplication.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+
+def get_user_by_mobile(db: Session, mobile: str) -> Optional[models.User]:
+    return db.query(models.User).filter(models.User.mobile == mobile).first()
+
+
+from typing import Tuple
+def get_loan_summary_for_mobile(
+    db: Session,
+    mobile: str,
+    skip: int = 0,
+    limit: int = 20,
+) -> Tuple[models.User, List[models.LoanApplication], int, int]:
+    user = get_user_by_mobile(db, mobile)
+    if not user:
+        return None, [], 0, 0
+
+    q = (
+        db.query(models.LoanApplication)
+        .filter(models.LoanApplication._beneficiary_id == user.id)
+        .order_by(models.LoanApplication.created_at.desc())
+    )
+
+    loans = q.offset(skip).limit(limit).all()
+
+    active_count = len(loans)
+    pending_count = sum(
+        1
+        for l in loans
+        if l.lifecycle_status in ("verification_required", "verification_pending")
+    )
+
+    return user, loans, active_count, pending_count
+
+
+
+from sqlalchemy import text
+from typing import List, Optional
+
+def create_verification_evidence(
+    db: Session,
+    loan_application_id: UUID,
+    evidence_data: schemas.EvidenceCreate
+) -> models.VerificationEvidence:
+    """Store verification evidence with optional GPS location"""
+    
+    # Prepare geometry if lat/lon provided
+    geom_text = None
+    if evidence_data.latitude and evidence_data.longitude:
+        # PostGIS uses (longitude, latitude) order!
+        geom_text = f"SRID=4326;POINT({evidence_data.longitude} {evidence_data.latitude})"
+    
+    evidence = models.VerificationEvidence(
+        loan_application_id=loan_application_id,
+        evidence_type=evidence_data.evidence_type,
+        requirement_type=evidence_data.requirement_type,
+        file_name=evidence_data.file_name,
+        file_path=evidence_data.file_path,
+        file_type=evidence_data.file_type,
+        file_size_bytes=evidence_data.file_size_bytes,
+        capture_address=evidence_data.capture_address,
+    )
+    
+    db.add(evidence)
+    db.flush()  # Get the ID before setting geometry
+    
+    # Set geometry using PostGIS function
+    if geom_text:
+        db.execute(
+            text("""
+                UPDATE verification_evidence 
+                SET capture_location = ST_GeomFromText(:geom_text)
+                WHERE id = :evidence_id
+            """),
+            {"geom_text": geom_text, "evidence_id": evidence.id}
+        )
+    
+    db.commit()
+    db.refresh(evidence)
+    return evidence
+
+def get_verification_evidence_with_location(
+    db: Session,
+    loan_application_id: UUID
+) -> List[dict]:
+    """Retrieve evidence with lat/lon extracted from PostGIS geometry"""
+    
+    query = text("""
+        SELECT 
+            id,
+            loan_application_id,
+            evidence_type,
+            requirement_type,
+            file_name,
+            file_path,
+            file_type,
+            file_size_bytes,
+            ST_Y(capture_location::geometry) AS latitude,
+            ST_X(capture_location::geometry) AS longitude,
+            capture_address,
+            captured_at
+        FROM verification_evidence
+        WHERE loan_application_id = :loan_id
+        ORDER BY captured_at DESC
+    """)
+    
+    result = db.execute(query, {"loan_id": loan_application_id})
+    return [dict(row._mapping) for row in result]
+
+def get_verification_status(
+    db: Session,
+    loan_ref_no: str
+) -> Optional[schemas.VerificationStatus]:
+    """Check completion status of verification steps"""
+    
+    loan = db.query(models.LoanApplication).filter(
+        models.LoanApplication.loan_ref_no == loan_ref_no
+    ).first()
+    
+    if not loan:
+        return None
+    
+    evidence_list = get_verification_evidence_with_location(db, loan.id)
+    
+    asset_photos = [e for e in evidence_list if e['evidence_type'] == 'asset_photo']
+    documents = [e for e in evidence_list if e['evidence_type'] == 'document']
+    
+    # Require at least 2 asset photos and 1 document
+    asset_photos_complete = len(asset_photos) >= 2
+    documents_complete = len(documents) >= 1
+    
+    return schemas.VerificationStatus(
+        loan_ref_no=loan_ref_no,
+        asset_photos_count=len(asset_photos),
+        documents_count=len(documents),
+        asset_photos_complete=asset_photos_complete,
+        documents_complete=documents_complete,
+        can_submit=asset_photos_complete and documents_complete
+    )
+
+
+from sqlalchemy import text
+
+def list_verification_evidence_for_loan(
+    db: Session,
+    loan_ref_no: str,
+) -> list[dict]:
+    loan = (
+        db.query(models.LoanApplication)
+        .filter(models.LoanApplication.loan_ref_no == loan_ref_no)
+        .first()
+    )
+    if not loan:
+        return []
+
+    q = text("""
+        SELECT 
+            id,
+            evidence_type,
+            requirement_type,
+            file_name,
+            file_type,
+            file_size_bytes,
+            captured_at,
+            ST_Y(capture_location::geometry) AS latitude,
+            ST_X(capture_location::geometry) AS longitude,
+            capture_address
+        FROM verification_evidence
+        WHERE loan_application_id = :loan_id
+        ORDER BY captured_at DESC
+    """)
+    rows = db.execute(q, {"loan_id": loan.id})
+    return [dict(row._mapping) for row in rows]

@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
-import 'database_test_page.dart';
 
+// ✅ Make sure these files actually exist inside lib/
+import 'database_test_page.dart';
 import 'translation_service.dart';
 import 'phone_verification.dart';
+import 'screens/otp_login_page.dart';
+import 'screens/loan_page.dart';
+
 
 void main() {
   runApp(MyApp());
@@ -68,129 +72,152 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
-    loadTranslatedText(); // load English initially
+    loadTranslatedText(); // load initial translations
   }
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      home: Scaffold(
-        backgroundColor: Colors.white,
-        body: uiText.isEmpty
-            ? Center(child: CircularProgressIndicator())
-            : SafeArea(
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    double width = constraints.maxWidth;
-                    double height = constraints.maxHeight;
+  return MaterialApp(
+  debugShowCheckedModeBanner: false,
+  routes: {
+    '/': (context) => LandingPage(
+          selectedLanguage: selectedLanguage,
+          uiText: uiText,
+          baseStrings: baseStrings,
+          languages: languages,
+          onLanguageChanged: (lang) async {
+            selectedLanguage = lang;
+            await loadTranslatedText();
+          },
+        ),
+    '/otpLogin': (context) => OTPLoginPage(
+          languageCode: selectedLanguage,  // <-- pass language here
+        ),
+    '/home': (context) => HomePage(),
+    '/phoneVerification': (context) =>
+        PhoneVerificationPage(languageCode: selectedLanguage),
+    '/databaseTest': (context) => DatabaseTestPage(),
+  },
+  initialRoute: '/',
+);
 
-                    return SingleChildScrollView(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          SizedBox(height: height * 0.02),
-                          Text(
-                            uiText[baseStrings[0]]!,
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                                fontSize: 22, fontWeight: FontWeight.bold),
-                          ),
-                          SizedBox(height: 10),
-                          Text(
-                            uiText[baseStrings[1]]!,
-                            textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 14, color: Colors.grey),
-                          ),
-                          SizedBox(height: 40),
+  }
+}
 
-                          // Feature Buttons
-                          feature(uiText[baseStrings[2]]!),
-                          feature(uiText[baseStrings[3]]!),
-                          feature(uiText[baseStrings[4]]!),
-                          feature(uiText[baseStrings[5]]!),
 
-                          SizedBox(height: 25),
+class LandingPage extends StatelessWidget {
+  final String selectedLanguage;
+  final Map<String, String> uiText;
+  final List<String> baseStrings;
+  final Map<String, String> languages;
+  final Function(String) onLanguageChanged;
 
-                          // Language Dropdown
-                          DropdownButtonFormField<String>(
-                            value: selectedLanguage,
-                            items: languages.entries
-                                .map((e) => DropdownMenuItem<String>(
-                                      value: e.key,
-                                      child: Text(e.value),
-                                    ))
-                                .toList(),
-                            onChanged: (value) async {
-                              selectedLanguage = value!;
-                              await loadTranslatedText();
-                            },
-                            decoration: InputDecoration(
-                              labelText: "Select Language",
-                              border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12)),
-                            ),
-                          ),
+  LandingPage({
+    required this.selectedLanguage,
+    required this.uiText,
+    required this.baseStrings,
+    required this.languages,
+    required this.onLanguageChanged,
+  });
 
-                          SizedBox(height: 30),
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: uiText.isEmpty
+          ? Center(child: CircularProgressIndicator())
+          : SafeArea(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    SizedBox(height: 20),
+                    Text(
+                      uiText[baseStrings[0]]!,
+                      textAlign: TextAlign.center,
+                      style:
+                          TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                    ),
+                    SizedBox(height: 10),
+                    Text(
+                      uiText[baseStrings[1]]!,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 14, color: Colors.grey),
+                    ),
+                    SizedBox(height: 40),
 
-                          // Get Started Button
-                          ElevatedButton(
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => PhoneVerificationPage(
-                                    languageCode: selectedLanguage,
-                                  ),
-                                ),
-                              );
-                            },
-                            style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.green,
-                                minimumSize: Size(width * 0.8, 50),
-                                shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(14))),
-                            child: Text(
-                              uiText[baseStrings[6]]!,
-                              style:
-                                  TextStyle(fontSize: 18, color: Colors.white),
-                            ),
-                          ),
+                    // Features
+                    feature(uiText[baseStrings[2]]!),
+                    feature(uiText[baseStrings[3]]!),
+                    feature(uiText[baseStrings[4]]!),
+                    feature(uiText[baseStrings[5]]!),
 
-                          SizedBox(height: 15),
+                    SizedBox(height: 25),
 
-                              SizedBox(height: 15),
-
-                          // Test Database Connection Button
-                          TextButton(
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(builder: (_) => DatabaseTestPage()),
-                              );
-                            },
-                            child: Text(
-                              "Test Database Connection",
-                              style: TextStyle(fontSize: 15, color: Colors.blue),
-                            ),
-                          ),
-
-                          // Keep the original Continue as Guest button too
-                          TextButton(
-                            onPressed: () {},
-                            child: Text(
-                              uiText[baseStrings[7]]!,
-                              style: TextStyle(fontSize: 15),
-                            ),
-                          )
-                        ],
+                    // ✅ Language Dropdown
+                    DropdownButtonFormField<String>(
+                      value: selectedLanguage,
+                      items: languages.entries
+                          .map((e) => DropdownMenuItem<String>(
+                                value: e.key,
+                                child: Text(e.value),
+                              ))
+                          .toList(),
+                      onChanged: (value) async {
+                        onLanguageChanged(value!);
+                      },
+                      decoration: InputDecoration(
+                        labelText: "Select Language",
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12)),
                       ),
-                    );
-                  },
+                    ),
+
+                    SizedBox(height: 30),
+
+                    // ✅ Get Started → OTP Login
+                    ElevatedButton(
+                      onPressed: () {
+                        Navigator.pushNamed(context, '/otpLogin');
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        minimumSize: Size(double.infinity, 50),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14)),
+                      ),
+                      child: Text(
+                        uiText[baseStrings[6]]!,
+                        style: TextStyle(fontSize: 18, color: Colors.white),
+                      ),
+                    ),
+
+                    SizedBox(height: 15),
+
+                    // ✅ Test Database Button
+                    TextButton(
+                      onPressed: () {
+                        Navigator.pushNamed(context, '/databaseTest');
+                      },
+                      child: Text(
+                        "Test Database Connection",
+                        style: TextStyle(fontSize: 15, color: Colors.blue),
+                      ),
+                    ),
+
+                    // ✅ Continue as Guest
+                    TextButton(
+                      onPressed: () {},
+                      child: Text(
+                        uiText[baseStrings[7]]!,
+                        style: TextStyle(fontSize: 15),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-      ),
+            ),
     );
   }
 
@@ -204,6 +231,21 @@ class _MyAppState extends State<MyApp> {
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(text, style: TextStyle(fontSize: 16)),
+    );
+  }
+}
+
+// ✅ Simple Home Page (kept as placeholder)
+class HomePage extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Home Page'),
+      ),
+      body: Center(
+        child: Text('Welcome Home!'),
+      ),
     );
   }
 }
