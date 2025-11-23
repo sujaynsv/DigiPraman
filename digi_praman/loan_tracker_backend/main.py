@@ -1,8 +1,17 @@
+from datetime import datetime, timezone
 from fastapi import FastAPI, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from uuid import UUID
+import os
+import base64
+import requests
+from dotenv import load_dotenv
+load_dotenv()
+
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY") or os.getenv("TRANSLATE_API_KEY")
+
 
 # Use absolute imports with your package structure
 import models
@@ -274,3 +283,215 @@ def health_check(db: Session = Depends(get_db)):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+
+from fastapi import Body, HTTPException
+from schemas import OTPRequest, OTPVerifyRequest
+@app.post("/auth/send-otp")
+def send_otp(request: schemas.OTPRequest, db: Session = Depends(get_db)):
+    otp = crud.create_otp(db, mobile=request.mobile)
+    return {"message": f"OTP sent to {request.mobile}"}
+
+from models import Organization
+def get_default_org_id_somehow(db: Session) -> UUID:
+    org = db.query(models.Organization).filter(Organization.name == "Default Org").first()
+    if not org:
+        raise HTTPException(status_code=400, detail="Default organization not found")
+    return org.id
+
+from models import OTP
+
+@app.post("/auth/verify-otp")
+def verify_otp_only(request: schemas.OTPVerifyRequest, db: Session = Depends(get_db)):
+    otp = (
+        db.query(OTP)
+        .filter(
+            OTP.mobile == request.mobile,
+            OTP.otp_code == request.otp,
+            OTP.verified == False
+        )
+        .order_by(OTP.created_at.desc())
+        .first()
+    )
+    if otp:
+        otp.verified = True
+        db.commit()
+        return {"status": "verified"}
+    else:
+        raise HTTPException(status_code=400, detail="Invalid or expired OTP")
+
+    # return {"status": "verified"}
+
+
+from typing import List
+from fastapi import Query
+
+@app.get("/loans", response_model=List[schemas.LoanApplicationResponse])
+def list_loans_for_user(
+    mobile: str = Query(..., description="User mobile number"),
+    skip: int = 0,
+    limit: int = 20,
+    db: Session = Depends(get_db),
+):
+    loans = crud.get_loans_for_mobile(db, mobile=mobile, skip=skip, limit=limit)
+    return loans
+
+
+from typing import List
+from fastapi import Query, HTTPException
+
+@app.get("/loans/summary", response_model=schemas.LoanSummaryResponse)
+def get_loans_summary(
+    mobile: str = Query(..., description="User mobile number with country code"),
+    skip: int = 0,
+    limit: int = 20,
+    db: Session = Depends(get_db),
+):
+    user, loans, active_count, pending_count = crud.get_loan_summary_for_mobile(
+        db, mobile=mobile, skip=skip, limit=limit
+    )
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return schemas.LoanSummaryResponse(
+        user_name=user.name or "User",
+        active_loans_count=active_count,
+        pending_verification_count=pending_count,
+        loans=loans,
+    )
+
+from fastapi.responses import StreamingResponse
+from io import BytesIO
+
+@app.post("/tts")
+def text_to_speech(
+    text: str = Query(..., description="Text to read"),
+    language_code: str = Query("en-IN", description="BCP-47 language code, e.g. en-IN, hi-IN"),
+):
+    if not GOOGLE_API_KEY:
+        raise HTTPException(status_code=500, detail="TTS API key not configured")
+
+    url = f"https://texttospeech.googleapis.com/v1/text:synthesize?key={GOOGLE_API_KEY}"
+
+    payload = {
+        "input": {"text": text},
+        "voice": {
+            "languageCode": language_code,
+            "ssmlGender": "NEUTRAL",
+        },
+        "audioConfig": {
+            "audioEncoding": "MP3",
+            "speakingRate": 1.0,
+        },
+    }
+
+    r = requests.post(url, json=payload)
+
+    # # Log exact error from Google
+    # print("TTS status:", r.status_code)
+    # print("TTS body:", r.text)
+
+    if r.status_code != 200:
+      raise HTTPException(status_code=500, detail=f"TTS failed: {r.text}")
+
+    data = r.json()
+    audio_content_b64 = data.get("audioContent")
+    if not audio_content_b64:
+      raise HTTPException(status_code=500, detail=f"No audio content from TTS: {r.text}")
+
+    audio_bytes = base64.b64decode(audio_content_b64)
+    return StreamingResponse(
+        BytesIO(audio_bytes),
+        media_type="audio/mpeg",
+        headers={"Content-Disposition": "inline; filename=tts.mp3"},
+    )
+
+
+import base64
+from fastapi import UploadFile, File, Form
+
+# File upload endpoint
+@app.post("/loans/{loan_ref_no:path}/evidence/upload")
+async def upload_verification_evidence(
+    loan_ref_no: str,
+    evidence_type: str = Form(...),  # 'asset_photo' or 'document'
+    requirement_type: str = Form(...),
+    latitude: Optional[float] = Form(None),
+    longitude: Optional[float] = Form(None),
+    capture_address: Optional[str] = Form(None),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    loan = db.query(models.LoanApplication).filter(
+        models.LoanApplication.loan_ref_no == loan_ref_no
+    ).first()
+    
+    if not loan:
+        raise HTTPException(status_code=404, detail="Loan not found")
+    
+    # Read file content
+    file_content = await file.read()
+    file_size = len(file_content)
+    
+    # Store file (for now, base64 encode and store in DB; production should use S3)
+    file_b64 = base64.b64encode(file_content).decode('utf-8')
+    file_path = f"data:{file.content_type};base64,{file_b64}"
+    
+    evidence_data = schemas.EvidenceCreate(
+        evidence_type=evidence_type,
+        requirement_type=requirement_type,
+        file_name=file.filename,
+        file_path=file_path,
+        file_type=file.content_type,
+        file_size_bytes=file_size,
+        latitude=latitude,
+        longitude=longitude,
+        capture_address=capture_address
+    )
+    
+    evidence = crud.create_verification_evidence(db, loan.id, evidence_data)
+    
+    return {"id": str(evidence.id), "message": "Evidence uploaded successfully"}
+
+# Get verification status
+@app.get("/loans/{loan_ref_no:path}/verification/status", response_model=schemas.VerificationStatus)
+def get_verification_status_endpoint(
+    loan_ref_no: str,
+    db: Session = Depends(get_db)
+):
+    status = crud.get_verification_status(db, loan_ref_no)
+    if not status:
+        raise HTTPException(status_code=404, detail="Loan not found")
+    return status
+
+# Submit verification
+@app.post("/loans/{loan_ref_no:path}/verification/submit")
+def submit_verification(
+    loan_ref_no: str,
+    db: Session = Depends(get_db)
+):
+    status = crud.get_verification_status(db, loan_ref_no)
+    if not status or not status.can_submit:
+        raise HTTPException(status_code=400, detail="Cannot submit: requirements not met")
+    
+    loan = db.query(models.LoanApplication).filter(
+        models.LoanApplication.loan_ref_no == loan_ref_no
+    ).first()
+    
+    loan.verification_submitted_at = datetime.now(timezone.utc)
+    loan.lifecycle_status = "verification_pending"
+    db.commit()
+    
+    return {"message": "Verification submitted successfully"}
+
+
+@app.get(
+    "/loans/{loan_ref_no:path}/evidence",
+    response_model=list[schemas.EvidenceListItem],
+)
+def list_verification_evidence(
+    loan_ref_no: str,
+    db: Session = Depends(get_db),
+):
+    items = crud.list_verification_evidence_for_loan(db, loan_ref_no)
+    return items
