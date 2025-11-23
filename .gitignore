@@ -191,4 +191,5 @@ Makefile
 # Executables
 *.exe
 *.out
-*.app
+*.appdigi_praman/loan_tracker_backend/.env
+*.env
