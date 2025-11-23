@@ -11,7 +11,7 @@ try:
 except Exception:  # pragma: no cover - API optional
     vision = None
 
-from ..config import OCRConfig
+from ..config import OCRConfig, settings
 from ..schemas import EvidenceDocument, OCRResult
 from ..utils.media_loader import MediaLoader, MediaLoaderError
 
@@ -32,7 +32,6 @@ class DocumentOCRService:
                 return vision.ImageAnnotatorClient.from_service_account_file(credentials_path)
             return vision.ImageAnnotatorClient()
         except Exception:
-            # Credentials missing; fall back to regex-only parsing
             return None
 
     def process_documents(
@@ -69,19 +68,52 @@ class DocumentOCRService:
         declared_amount: Optional[float],
         declared_date: Optional[datetime],
     ) -> OCRResult:
-        if not self.client:
-            # Lightweight regex fallback if GCV unavailable
-            text = ""
+        text = ""
+        confidence = 0.0
+        
+        # Strategy 1: Google Cloud Client (Service Account)
+        if self.client:
+            try:
+                image = vision.Image(content=payload)
+                response = self.client.document_text_detection(image=image)
+                if not response.error.message:
+                    text = response.full_text_annotation.text
+                    confidences = [s.confidence for p in response.full_text_annotation.pages for b in p.blocks for paragraph in b.paragraphs for word in paragraph.words for s in word.symbols]
+                    confidence = float(sum(confidences) / len(confidences)) if confidences else 0.8
+            except Exception:
+                pass
+
+        # Strategy 2: REST API (API Key)
+        if not text and settings.google_api_key:
+            import requests
+            import base64
+            
+            try:
+                api_url = f"https://vision.googleapis.com/v1/images:annotate?key={settings.google_api_key}"
+                print(f"DEBUG: Calling Google Vision API at {api_url[:40]}...")
+                b64_image = base64.b64encode(payload).decode("utf-8")
+                body = {
+                    "requests": [
+                        {
+                            "image": {"content": b64_image},
+                            "features": [{"type": "DOCUMENT_TEXT_DETECTION"}]
+                        }
+                    ]
+                }
+                resp = requests.post(api_url, json=body, timeout=10)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    responses = data.get("responses", [])
+                    if responses and "fullTextAnnotation" in responses[0]:
+                        text = responses[0]["fullTextAnnotation"]["text"]
+                        # Simple confidence approximation since REST response structure is deep
+                        confidence = 0.9 
+            except Exception:
+                pass
+
+        # Strategy 3: Fallback
+        if not text:
             confidence = 0.5
-        else:  # pragma: no cover - network
-            image = vision.Image(content=payload)
-            response = self.client.document_text_detection(image=image)
-            if response.error.message:
-                raise RuntimeError(response.error.message)
-            text = response.full_text_annotation.text
-            # Use average symbol confidence when available
-            confidences = [s.confidence for p in response.full_text_annotation.pages for b in p.blocks for paragraph in b.paragraphs for word in paragraph.words for s in word.symbols]
-            confidence = float(sum(confidences) / len(confidences)) if confidences else 0.8
 
         parsed_fields = self._parse_fields(text)
         penalties, crosscheck = self._crosscheck(parsed_fields, declared_vendor, declared_amount, declared_date, confidence)
