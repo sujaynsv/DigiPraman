@@ -1,0 +1,54 @@
+{
+  "weights": {
+    "image_quality_weight": 0.15,
+    "asset_match_weight": 0.2,
+    "ocr_match_weight": 0.2,
+    "duplicate_weight": 0.1,
+    "fraud_score_weight": 0.25
+  },
+  "thresholds": {
+    "auto_approve_threshold": 65,
+    "officer_review_threshold": 85
+  },
+  "quality": {
+    "blur_variance_threshold": 100.0,
+    "brightness_dark_threshold": 60.0,
+    "brightness_bright_threshold": 220.0,
+    "contrast_threshold": 20.0,
+    "min_width": 600,
+    "min_height": 400,
+    "officer_review_quality_threshold": 0.8
+  },
+  "detection": {
+    "confidence_threshold": 0.45,
+    "iou_threshold": 0.4,
+    "asset_synonyms": {
+      "tractor": ["farm tractor", "agricultural vehicle"],
+      "vehicle": ["car", "truck", "van"],
+      "machinery": ["machine", "equipment"]
+    }
+  },
+  "ocr": {
+    "provider_confidence_threshold": 0.7,
+    "amount_tolerance_pct": 0.25,
+    "date_tolerance_days": 30,
+    "vendor_penalty": 10.0,
+    "amount_penalty": 15.0,
+    "date_penalty": 10.0,
+    "low_confidence_penalty": 5.0
+  },
+  "duplicates": {
+    "hash_distance_threshold": 5,
+    "duplicate_penalty_points": 15.0
+  },
+  "fraud_rules": {
+    "gps_threshold_km": 25.0,
+    "gps_penalty": 15.0,
+    "off_hours_start": 7,
+    "off_hours_end": 20,
+    "off_hours_penalty": 5.0,
+    "device_cases_limit": 2,
+    "device_penalty": 10.0,
+    "history_penalty": 10.0
+  }
+}
