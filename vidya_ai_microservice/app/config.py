@@ -91,7 +91,7 @@ class Settings(BaseSettings):
         description="Path for persisting device usage counters.",
     )
     google_credentials_path: Optional[Path] = Field(default=None, description="Service account key for Vision API")
-    google_api_key: Optional[str] = Field(default=None, description="Direct API key for Google Vision REST usage")
+    google_api_key: Optional[str] = Field(default=None, description="Direct API key for Google Vision REST usage", validation_alias="GOOGLE_API_KEY")
     google_project_id: Optional[str] = Field(default=None)
     yolo_model_path: Optional[Path] = Field(default=None)
     model_registry_path: Path = Field(
