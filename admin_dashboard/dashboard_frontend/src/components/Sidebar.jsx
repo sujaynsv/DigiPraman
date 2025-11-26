@@ -1,10 +1,10 @@
-import { useState } from 'react';
-import { FaHome, FaBuilding, FaUsers, FaClipboardList } from 'react-icons/fa';
+import { FaHome, FaBuilding, FaUsers, FaClipboardList, FaFileAlt } from 'react-icons/fa';
 import './Sidebar.css';
 
 function Sidebar({ currentView, setCurrentView }) {
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: <FaHome /> },
+    { id: 'applications', label: 'Applications', icon: <FaFileAlt /> },
     { id: 'organizations', label: 'Organizations', icon: <FaBuilding /> },
     { id: 'users', label: 'Beneficiaries', icon: <FaUsers /> },
     { id: 'schemes', label: 'Schemes', icon: <FaClipboardList /> },
@@ -13,7 +13,7 @@ function Sidebar({ currentView, setCurrentView }) {
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
-        <h2>📊 Admin Portal</h2>
+        <h2>📊 DigiPraman</h2>
       </div>
       <nav className="sidebar-nav">
         {menuItems.map((item) => (

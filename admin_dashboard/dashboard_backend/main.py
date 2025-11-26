@@ -57,8 +57,8 @@ def health_check():
 # ============================================
 # STATS ENDPOINT
 # ============================================
-@app.get("/stats/")
-def get_stats(db: Session = Depends(get_db)):
+# @app.get("/stats/")
+# def get_stats(db: Session = Depends(get_db)):
     """Get dashboard statistics"""
     try:
         stats = crud.get_stats(db)
@@ -74,6 +74,30 @@ def get_stats(db: Session = Depends(get_db)):
             "total_admins": 0,
             "total_schemes": 0,
         }
+
+@app.get("/stats/")
+def get_dashboard_stats(db: Session = Depends(get_db)):
+    try:
+        return crud.get_stats(db)
+    except Exception as e:
+        print(f"❌ Error in dashboard stats: {e}")
+        return {
+            "pending_review": 0,
+            "approved": 0,
+            "flagged": 0,
+            "rejected": 0,
+            "pending_review_change": 0,
+            "approved_change": 0,
+            "flagged_change": 0,
+            "rejected_change": 0,
+            "risk_distribution": {
+                "low": {"count": 0, "percentage": 0},
+                "medium": {"count": 0, "percentage": 0},
+                "high": {"count": 0, "percentage": 0}
+            },
+            "recent_applications": []
+        }
+
 
 # ============================================
 # ORGANIZATION ENDPOINTS
@@ -174,3 +198,31 @@ def create_scheme(scheme: schemas.SchemeCreate, db: Session = Depends(get_db)):
     except Exception as e:
         print(f"❌ Error creating scheme: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================
+# APPLICATION ENDPOINTS
+# ============================================
+
+@app.get("/applications/")
+def list_applications(
+    search: Optional[str] = Query(None),
+    status: Optional[str] = Query("all"),
+    risk_level: Optional[str] = Query("all"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=200),
+    db: Session = Depends(get_db)
+):
+    """Get loan applications for the admin UI"""
+    try:
+        return crud.get_applications(
+            db,
+            search=search,
+            status=status,
+            risk_level=risk_level,
+            skip=skip,
+            limit=limit,
+        )
+    except Exception as e:
+        print(f"❌ Error loading applications: {e}")
+        raise HTTPException(status_code=500, detail="Unable to load applications")

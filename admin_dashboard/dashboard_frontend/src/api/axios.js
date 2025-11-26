@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // ✅ Use localhost since React and backend are on same machine
-const BASE_URL = 'http://127.0.0.1:8100';
+const BASE_URL = 'http://127.0.0.1:8080';
 
 // Alternative: Use your Mac IP if accessing from another device
 // const BASE_URL = 'http://192.168.0.5:8100';
@@ -52,11 +52,12 @@ api.interceptors.response.use(
 // =====================================================
 
 // Stats
-export const getStats = () => {
-  console.log('📊 Fetching stats...');
-  return api.get('/stats/');
-};
+// export const getStats = () => {
+//   console.log('📊 Fetching stats...');
+//   return api.get('/stats/');
+// };
 
+export const getStats = () => axios.get(`${BASE_URL}/stats/`);
 // Organizations
 export const getOrganizations = (skip = 0, limit = 100) => 
   api.get('/organizations/', { params: { skip, limit } });
@@ -92,6 +93,10 @@ export const getScheme = (id) =>
 
 export const createScheme = (data) => 
   api.post('/schemes/', data);
+
+// Applications
+export const getApplications = (params = {}) =>
+  api.get('/applications/', { params });
 
 // Test connection
 export const testConnection = () => {
