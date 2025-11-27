@@ -159,16 +159,32 @@ class LoanApplicationResponse(BaseModel):
     next_emi_date: Optional[date] = None
     purpose: Optional[str] = None
     lifecycle_status: Optional[str] = None
+    verification_stage: Optional[str] = None  # ADD THIS LINE
 
     class Config:
         from_attributes = True
+
+
+
+class LoanSummaryItem(BaseModel):
+    id: UUID
+    loan_ref_no: str
+    purpose: Optional[str] = None
+    sanctioned_amount: Optional[float] = None
+    next_emi_date: Optional[str] = None
+    lifecycle_status: Optional[str] = None
+    verification_stage: Optional[str] = None  # MAKE SURE THIS LINE EXISTS
+    
+    class Config:
+        from_attributes = True
+
 
 from typing import List
 class LoanSummaryResponse(BaseModel):
     user_name: str
     active_loans_count: int
     pending_verification_count: int
-    loans: List[LoanApplicationResponse]
+    loans: List[LoanSummaryItem]  # ✅ CORRECT - has verification_stage
 
     class Config:
         from_attributes = True
@@ -236,3 +252,70 @@ class EvidenceListItem(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+from pydantic import BaseModel
+from typing import Optional, List
+from datetime import datetime
+from uuid import UUID
+from enum import Enum
+
+class VerificationStageEnum(str, Enum):
+    NOT_STARTED = "not_started"
+    DOCUMENTS_UPLOADED = "documents_uploaded"
+    SUBMITTED = "submitted"
+    UNDER_REVIEW = "under_review"
+    VIDEO_VERIFICATION_REQUESTED = "video_verification_requested"
+    VIDEO_VERIFICATION_COMPLETED = "video_verification_completed"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+class TrackingEventResponse(BaseModel):
+    id: UUID
+    stage: VerificationStageEnum
+    description: Optional[str]
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+class ApplicationTrackingResponse(BaseModel):
+    loan_ref_no: str
+    current_stage: VerificationStageEnum
+    submitted_at: Optional[datetime]
+    reviewed_at: Optional[datetime]
+    video_call_requested: bool
+    video_call_scheduled_for: Optional[datetime]
+    events: List[TrackingEventResponse]
+
+class VideoCalling(BaseModel):
+    id: UUID
+    scheduled_for: Optional[datetime]
+    meeting_link: Optional[str]
+    status: str
+    notes: Optional[str]
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+class EvidenceWithPreview(BaseModel):
+    id: UUID
+    evidence_type: str
+    requirement_type: str
+    file_name: str
+    file_type: str
+    file_size_bytes: int
+    file_data: str  # base64 encoded for preview
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    capture_address: Optional[str] = None
+    captured_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+
+class VideoCallCreateRequest(BaseModel):
+    loan_ref_no: str

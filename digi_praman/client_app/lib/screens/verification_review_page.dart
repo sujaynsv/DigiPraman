@@ -1,5 +1,8 @@
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
+import './application_tracking_page.dart';
 
 class VerificationReviewPage extends StatefulWidget {
   final String loanRefNo;
@@ -18,26 +21,84 @@ class _VerificationReviewPageState extends State<VerificationReviewPage> {
   @override
   void initState() {
     super.initState();
-    _evidenceFuture = ApiService.listEvidence(widget.loanRefNo);
+    _evidenceFuture = ApiService.listEvidenceFull(widget.loanRefNo);
   }
 
   Future<void> _submitFinal() async {
     setState(() => _submitting = true);
     try {
-      await ApiService.submitVerification(widget.loanRefNo);
+      await ApiService.submitVerificationFinal(widget.loanRefNo);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Verification submitted for review')),
+      
+      // Navigate to tracking page
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ApplicationTrackingPage(loanRefNo: widget.loanRefNo),
+        ),
       );
-      Navigator.pop(context); // go back to loans page
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Failed to submit. Please try again.')),
       );
-    } finally {
-      if (mounted) setState(() => _submitting = false);
+      setState(() => _submitting = false);
     }
+  }
+
+  void _showPreview(Map<String, dynamic> evidence) {
+    final fileData = evidence['file_data'] as String?;
+    final fileType = evidence['file_type'] as String;
+    final fileName = evidence['file_name'] as String;
+
+    if (fileData == null || !fileData.startsWith('data:')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Preview data not available')),
+      );
+      return;
+    }
+
+    // Extract base64 part
+    final base64Data = fileData.split(',').last;
+    final bytes = base64Decode(base64Data);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AppBar(
+              title: Text(fileName, style: const TextStyle(fontSize: 14)),
+              automaticallyImplyLeading: false,
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.pop(ctx),
+                ),
+              ],
+            ),
+            Expanded(
+              child: fileType.startsWith('image/')
+                  ? Image.memory(bytes, fit: BoxFit.contain)
+                  : Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.picture_as_pdf, size: 64),
+                          const SizedBox(height: 16),
+                          Text(fileName),
+                          const SizedBox(height: 8),
+                          const Text('PDF preview not available in app',
+                              style: TextStyle(fontSize: 12)),
+                        ],
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -97,12 +158,11 @@ class _VerificationReviewPageState extends State<VerificationReviewPage> {
                         padding: EdgeInsets.only(bottom: 12),
                         child: Text(
                           'No asset photos uploaded yet.',
-                          style:
-                              TextStyle(fontSize: 13, color: Colors.grey),
+                          style: TextStyle(fontSize: 13, color: Colors.grey),
                         ),
                       )
                     else
-                      ...assetPhotos.map(_buildEvidenceTile),
+                      ...assetPhotos.map((e) => _buildEvidenceTile(e)),
 
                     const SizedBox(height: 16),
 
@@ -115,12 +175,11 @@ class _VerificationReviewPageState extends State<VerificationReviewPage> {
                         padding: EdgeInsets.only(bottom: 12),
                         child: Text(
                           'No documents uploaded yet.',
-                          style:
-                              TextStyle(fontSize: 13, color: Colors.grey),
+                          style: TextStyle(fontSize: 13, color: Colors.grey),
                         ),
                       )
                     else
-                      ...documents.map(_buildEvidenceTile),
+                      ...documents.map((e) => _buildEvidenceTile(e)),
                   ],
                 ),
               ),
@@ -142,16 +201,14 @@ class _VerificationReviewPageState extends State<VerificationReviewPage> {
                     onPressed: _submitting ? null : _submitFinal,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.green,
-                      padding:
-                          const EdgeInsets.symmetric(vertical: 16),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
                     child: Text(
                       _submitting ? 'Submitting...' : 'Submit for verification',
-                      style:
-                          const TextStyle(fontSize: 16, color: Colors.white),
+                      style: const TextStyle(fontSize: 16, color: Colors.white),
                     ),
                   ),
                 ),
@@ -224,13 +281,14 @@ class _VerificationReviewPageState extends State<VerificationReviewPage> {
               ),
           ],
         ),
-        onTap: () {
-          // Placeholder: later we can open full-screen viewer by fetching the file
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-                content: Text('Preview not implemented in prototype')),
-          );
-        },
+        trailing: ElevatedButton(
+          onPressed: () => _showPreview(e),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.green,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          ),
+          child: const Text('Preview', style: TextStyle(fontSize: 12)),
+        ),
       ),
     );
   }

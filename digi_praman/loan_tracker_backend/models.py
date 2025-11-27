@@ -1,10 +1,13 @@
-from sqlalchemy import Column, String, DateTime, Numeric, Enum as SQLEnum, CheckConstraint, UniqueConstraint, ForeignKey, Text, Index
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy import Column, String, DateTime, Numeric, Enum as SQLEnum, CheckConstraint, UniqueConstraint, ForeignKey, Text, Index, Date, Boolean, text
+from sqlalchemy.dialects.postgresql import UUID, JSONB, UUID as PGUUID, JSON
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
+from geoalchemy2 import Geometry
 from datetime import datetime
 import uuid
 import enum
 from database import Base
+
 
 # =====================================================
 # ENUM Types
@@ -14,7 +17,6 @@ class RoleType(str, enum.Enum):
     BENEFICIARY = "beneficiary"
     OFFICER = "officer"
     ADMIN = "admin"
-
 
 
 class VerificationStatus(str, enum.Enum):
@@ -28,15 +30,18 @@ class VerificationStatus(str, enum.Enum):
     VIDEO_PENDING = "video_pending"
     VIDEO_DONE = "video_done"
 
+
 class RequirementType(str, enum.Enum):
     PHOTO = "photo"
     VIDEO = "video"
     DOC = "doc"
 
+
 class RequirementStatus(str, enum.Enum):
     NOT_STARTED = "not_started"
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
+
 
 class DecisionType(str, enum.Enum):
     APPROVE = "approve"
@@ -44,11 +49,26 @@ class DecisionType(str, enum.Enum):
     REQUEST_MORE = "request_more"
     VIDEO_REQUIRED = "video_required"
 
+
 class NotificationChannel(str, enum.Enum):
     SMS = "sms"
     EMAIL = "email"
     WHATSAPP = "whatsapp"
     PUSH = "push"
+
+
+# ADD THIS NEW ENUM HERE (before LoanApplication)
+class VerificationStage(str, enum.Enum):
+    not_started = "not_started"
+    documents_uploaded = "documents_uploaded"
+    submitted = "submitted"
+    under_review = "under_review"
+    video_verification_requested = "video_verification_requested"
+    video_verification_completed = "video_verification_completed"
+    approved = "approved"
+    rejected = "rejected"
+
+
 
 # =====================================================
 # ORGANIZATIONS
@@ -70,6 +90,7 @@ class Organization(Base):
     __table_args__ = (
         Index('idx_organizations_name', 'name'),
     )
+
 
 # =====================================================
 # SCHEMES (Loan Programs)
@@ -94,6 +115,7 @@ class Scheme(Base):
         Index('idx_schemes_org_id', '_org_id'),
         Index('idx_schemes_code', 'code', unique=True),
     )
+
 
 # =====================================================
 # USERS
@@ -124,8 +146,6 @@ class User(Base):
     )
 
 
-from sqlalchemy import Boolean
-
 class OTP(Base):
     __tablename__ = "otps"
 
@@ -153,7 +173,7 @@ class Device(Base):
     device_fingerprint = Column(Text, unique=True, nullable=False)
     last_seen = Column(DateTime(timezone=True))
     trust_score = Column(Numeric(3, 2))
-    device_metadata = Column(JSONB)  # Changed from metadata
+    device_metadata = Column(JSONB)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
 
     # Relationships
@@ -166,16 +186,9 @@ class Device(Base):
     )
 
 
-from sqlalchemy import Column, String, DateTime, Numeric, Enum as SQLEnum, CheckConstraint, UniqueConstraint, ForeignKey, Index, Date, Boolean, Text, text
-from sqlalchemy.dialects.postgresql import UUID as PGUUID, JSONB, JSON
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func  # ← Make sure this line is present
-from geoalchemy2 import Geometry
-import enum
-import uuid
-from datetime import datetime
-
+# =====================================================
+# LOAN APPLICATIONS
+# =====================================================
 
 class LoanApplication(Base):
     __tablename__ = "loan_applications"
@@ -184,7 +197,7 @@ class LoanApplication(Base):
     _org_id = Column(PGUUID(as_uuid=True), ForeignKey('organizations.id', ondelete='RESTRICT'), nullable=False)
     _scheme_id = Column(PGUUID(as_uuid=True), ForeignKey('schemes.id', ondelete='RESTRICT'), nullable=False)
     _beneficiary_id = Column(PGUUID(as_uuid=True), ForeignKey('users.id', ondelete='RESTRICT'), nullable=False)
-    verification_evidence = relationship("VerificationEvidence", back_populates="loan_application")
+    
     loan_ref_no = Column(Text, unique=True, nullable=False)
     loan_type = Column(Text)
     sanctioned_amount = Column(Numeric(12, 2))
@@ -196,13 +209,25 @@ class LoanApplication(Base):
     lifecycle_status = Column(Text)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
 
-    # optional relationships
-    beneficiary = relationship("User")
+    # New verification tracking fields
+    verification_stage = Column(SQLEnum(VerificationStage), default=VerificationStage.not_started)
+    submitted_at = Column(DateTime(timezone=True))
+    reviewed_at = Column(DateTime(timezone=True))
+    video_call_requested_at = Column(DateTime(timezone=True))
+    video_call_scheduled_for = Column(DateTime(timezone=True))
+    reviewed_by = Column(PGUUID(as_uuid=True), ForeignKey("users.id"))
+    
+    # Relationships
+    verification_evidence = relationship("VerificationEvidence", back_populates="loan_application")
+    tracking_events = relationship("VerificationTrackingEvent", back_populates="loan_application")
+    video_call_requests = relationship("VideoCallRequest", back_populates="loan_application")
+    beneficiary = relationship("User", foreign_keys=[_beneficiary_id])
     scheme = relationship("Scheme")
 
 
-
-from geoalchemy2 import Geometry
+# =====================================================
+# VERIFICATION EVIDENCE
+# =====================================================
 
 class VerificationEvidence(Base):
     __tablename__ = "verification_evidence"
@@ -223,3 +248,40 @@ class VerificationEvidence(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     loan_application = relationship("LoanApplication", back_populates="verification_evidence")
+
+
+# =====================================================
+# VERIFICATION TRACKING
+# =====================================================
+
+class VerificationTrackingEvent(Base):
+    __tablename__ = "verification_tracking_events"
+    
+    id = Column(PGUUID(as_uuid=True), primary_key=True, server_default=text("uuid_generate_v4()"))
+    loan_application_id = Column(PGUUID(as_uuid=True), ForeignKey("loan_applications.id", ondelete="CASCADE"), nullable=False)
+    stage = Column(SQLEnum(VerificationStage), nullable=False)
+    description = Column(Text)
+    created_by = Column(PGUUID(as_uuid=True), ForeignKey("users.id"))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    loan_application = relationship("LoanApplication", back_populates="tracking_events")
+
+
+# =====================================================
+# VIDEO CALL REQUESTS
+# =====================================================
+
+class VideoCallRequest(Base):
+    __tablename__ = "video_call_requests"
+    
+    id = Column(PGUUID(as_uuid=True), primary_key=True, server_default=text("uuid_generate_v4()"))
+    loan_application_id = Column(PGUUID(as_uuid=True), ForeignKey("loan_applications.id", ondelete="CASCADE"), nullable=False)
+    requested_by = Column(PGUUID(as_uuid=True), ForeignKey("users.id"))
+    scheduled_for = Column(DateTime(timezone=True))
+    meeting_link = Column(Text)
+    status = Column(String(20), default='pending')
+    notes = Column(Text)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    loan_application = relationship("LoanApplication", back_populates="video_call_requests")

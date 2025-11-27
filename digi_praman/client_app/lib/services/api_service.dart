@@ -8,7 +8,7 @@ class ApiService {
   // For iOS Simulator: use localhost
   // For Android Emulator: use 10.0.2.2
   // For physical device: use your computer's IP address
-static const String baseUrl = 'https://bee8f4e0895b.ngrok-free.app';
+static const String baseUrl = 'https://7657ebfd7826.ngrok-free.app';
 
   
   // Test connection
@@ -231,5 +231,73 @@ static const String baseUrl = 'https://bee8f4e0895b.ngrok-free.app';
     throw Exception('Failed to load evidence');
   }
 }
+// Get evidence with full preview data
+static Future<List<Map<String, dynamic>>> listEvidenceFull(String loanRefNo) async {
+  final uri = Uri.parse('$baseUrl/loans/$loanRefNo/evidence/full');
+  final response = await http.get(uri);
+
+  if (response.statusCode == 200) {
+    final decoded = jsonDecode(response.body);
+    if (decoded is List) {
+      return decoded.cast<Map<String, dynamic>>();
+    }
+    throw Exception('Unexpected evidence payload');
+  } else {
+    throw Exception('Failed to load evidence');
+  }
+}
+
+// Get single evidence preview
+static Future<Map<String, dynamic>> getEvidencePreview(
+    String loanRefNo, String evidenceId) async {
+  final uri = Uri.parse('$baseUrl/loans/$loanRefNo/evidence/$evidenceId/preview');
+  final response = await http.get(uri);
+
+  if (response.statusCode == 200) {
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  } else {
+    throw Exception('Failed to load preview');
+  }
+}
+
+// Final submission
+static Future<void> submitVerificationFinal(String loanRefNo) async {
+  final uri = Uri.parse('$baseUrl/loans/$loanRefNo/verification/submit-final');
+  final response = await http.post(uri);
+
+  if (response.statusCode != 200) {
+    throw Exception('Failed to submit verification');
+  }
+}
+
+// Get application tracking
+static Future<Map<String, dynamic>> getApplicationTracking(String loanRefNo) async {
+  final uri = Uri.parse('$baseUrl/loans/$loanRefNo/tracking');
+  final response = await http.get(uri);
+
+  if (response.statusCode == 200) {
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  } else {
+    throw Exception('Failed to load tracking');
+  }
+}
+
+static Future<Map<String, dynamic>> startVideoCall(String loanRefNo) async {
+  final encodedRef = Uri.encodeComponent(loanRefNo);
+  final uri = Uri.parse('$baseUrl/video-call/start/$encodedRef');
+  
+  final response = await http.post(uri);
+  
+  if (response.statusCode == 200) {
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  } else {
+    throw Exception('Failed to start video call');
+  }
+}
+
+
+
+
+
 
 }

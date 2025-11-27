@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from wsgiref import headers
 from fastapi import FastAPI, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -342,23 +343,40 @@ from fastapi import Query, HTTPException
 
 @app.get("/loans/summary", response_model=schemas.LoanSummaryResponse)
 def get_loans_summary(
-    mobile: str = Query(..., description="User mobile number with country code"),
+    mobile: str,
     skip: int = 0,
     limit: int = 20,
     db: Session = Depends(get_db),
 ):
     user, loans, active_count, pending_count = crud.get_loan_summary_for_mobile(
-        db, mobile=mobile, skip=skip, limit=limit
+        db, mobile, skip, limit
     )
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+
+    loans_data = []
+    for loan in loans:
+        # DEBUG: Print what we're getting
+        print(f"DEBUG: loan_ref_no={loan.loan_ref_no}, verification_stage={loan.verification_stage}, type={type(loan.verification_stage)}")
+        
+        loans_data.append({
+            "id": str(loan.id),
+            "loan_ref_no": loan.loan_ref_no,
+            "purpose": loan.purpose,
+            "sanctioned_amount": float(loan.sanctioned_amount) if loan.sanctioned_amount else None,
+            "next_emi_date": str(loan.next_emi_date) if loan.next_emi_date else None,
+            "lifecycle_status": loan.lifecycle_status,
+            "verification_stage": loan.verification_stage.value if loan.verification_stage else "not_started",  # THIS LINE MUST BE HERE
+        })
+
 
     return schemas.LoanSummaryResponse(
         user_name=user.name or "User",
         active_loans_count=active_count,
         pending_verification_count=pending_count,
-        loans=loans,
+        loans=loans_data,
     )
+
 
 from fastapi.responses import StreamingResponse
 from io import BytesIO
@@ -495,3 +513,138 @@ def list_verification_evidence(
 ):
     items = crud.list_verification_evidence_for_loan(db, loan_ref_no)
     return items
+
+
+from datetime import datetime, timezone
+
+# Get evidence with preview (for download/display)
+@app.get("/loans/{loan_ref_no:path}/evidence/{evidence_id}/preview")
+def get_evidence_preview(
+    loan_ref_no: str,
+    evidence_id: UUID,
+    db: Session = Depends(get_db)
+):
+    evidence = crud.get_evidence_with_preview(db, evidence_id)
+    if not evidence:
+        raise HTTPException(status_code=404, detail="Evidence not found")
+    
+    return evidence
+
+# List evidence with full data for review page
+@app.get("/loans/{loan_ref_no:path}/evidence/full", response_model=List[schemas.EvidenceWithPreview])
+def list_evidence_full(
+    loan_ref_no: str,
+    db: Session = Depends(get_db)
+):
+    items = crud.list_evidence_with_previews(db, loan_ref_no)
+    return items
+
+# Submit verification (final step from review page)
+@app.post("/loans/{loan_ref_no:path}/verification/submit-final")
+def submit_verification_final(
+    loan_ref_no: str,
+    db: Session = Depends(get_db)
+):
+    try:
+        loan = crud.submit_verification_final(db, loan_ref_no)
+        return {"message": "Application submitted successfully", "stage": loan.verification_stage}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+# Get application tracking
+@app.get("/loans/{loan_ref_no:path}/tracking", response_model=schemas.ApplicationTrackingResponse)
+def get_application_tracking(
+    loan_ref_no: str,
+    db: Session = Depends(get_db)
+):
+    tracking = crud.get_application_tracking(db, loan_ref_no)
+    if not tracking:
+        raise HTTPException(status_code=404, detail="Loan not found")
+    return tracking
+
+# Get pending video calls for user
+@app.get("/video-calls/pending")
+def get_pending_video_calls(
+    mobile: str,
+    db: Session = Depends(get_db)
+):
+    calls = crud.get_pending_video_calls(db, mobile)
+    return calls
+
+# Update when uploading evidence (mark as documents_uploaded)
+@app.post("/loans/{loan_ref_no:path}/evidence/upload")
+async def upload_verification_evidence(
+    loan_ref_no: str,
+    evidence_type: str = Form(...),
+    requirement_type: str = Form(...),
+    latitude: Optional[float] = Form(None),
+    longitude: Optional[float] = Form(None),
+    capture_address: Optional[str] = Form(None),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    loan = db.query(models.LoanApplication).filter(
+        models.LoanApplication.loan_ref_no == loan_ref_no
+    ).first()
+    
+    if not loan:
+        raise HTTPException(status_code=404, detail="Loan not found")
+    
+    file_content = await file.read()
+    file_size = len(file_content)
+    file_b64 = base64.b64encode(file_content).decode('utf-8')
+    file_path = f"data:{file.content_type};base64,{file_b64}"
+    
+    evidence_data = schemas.EvidenceCreate(
+        evidence_type=evidence_type,
+        requirement_type=requirement_type,
+        file_name=file.filename,
+        file_path=file_path,
+        file_type=file.content_type,
+        file_size_bytes=file_size,
+        latitude=latitude,
+        longitude=longitude,
+        capture_address=capture_address
+    )
+    
+    evidence = crud.create_verification_evidence(db, loan.id, evidence_data)
+    
+    # Update stage if first upload
+    if loan.verification_stage == models.VerificationStage.not_started:
+        loan.verification_stage = models.VerificationStage.documents_uploaded
+        db.commit()
+    
+    return {"id": str(evidence.id), "message": "Evidence uploaded successfully"}
+
+
+@app.post("/video-call/start/{loan_ref_no:path}")
+def start_video_call(
+    loan_ref_no: str,
+    db: Session = Depends(get_db)
+):
+    """Generate Jitsi meeting room name"""
+    try:
+        loan = db.query(models.LoanApplication).filter(
+            models.LoanApplication.loan_ref_no == loan_ref_no
+        ).first()
+        
+        if not loan:
+            raise HTTPException(status_code=404, detail="Loan not found")
+        
+        # Create unique room name from loan ref
+        room_name = f"loan_{loan_ref_no.replace('/', '_')}".lower()
+        
+        # Jitsi URL with camera configuration
+        jitsi_url = f"https://meet.jit.si/{room_name}?config.constraints={{mediaSource:{{audio:true,video:{{width:{{ideal:1280}},height:{{ideal:720}}}}}}}}&interfaceConfig.DEFAULT_REMOTE_DISPLAY_NAME_KEY='on'"
+        
+        # Update loan verification stage
+        loan.verification_stage = models.VerificationStage.video_verification_requested
+        db.commit()
+        
+        return {
+            "room_url": jitsi_url,
+            "room_name": room_name
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))

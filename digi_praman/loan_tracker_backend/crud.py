@@ -258,14 +258,14 @@ def get_user_by_mobile(db: Session, mobile: str) -> Optional[models.User]:
 
 from typing import Tuple
 def get_loan_summary_for_mobile(
-    db: Session,
-    mobile: str,
-    skip: int = 0,
-    limit: int = 20,
-) -> Tuple[models.User, List[models.LoanApplication], int, int]:
-    user = get_user_by_mobile(db, mobile)
+    db: Session, mobile: str, skip: int = 0, limit: int = 20
+) -> tuple:
+    """
+    Return (user, loans, active_count, pending_count)
+    """
+    user = db.query(models.User).filter(models.User.mobile == mobile).first()
     if not user:
-        return None, [], 0, 0
+        return (None, [], 0, 0)
 
     q = (
         db.query(models.LoanApplication)
@@ -275,14 +275,27 @@ def get_loan_summary_for_mobile(
 
     loans = q.offset(skip).limit(limit).all()
 
-    active_count = len(loans)
-    pending_count = sum(
-        1
-        for l in loans
-        if l.lifecycle_status in ("verification_required", "verification_pending")
+    active_count = (
+        db.query(models.LoanApplication)
+        .filter(
+            models.LoanApplication._beneficiary_id == user.id,
+            models.LoanApplication.lifecycle_status.in_(["active", "disbursed"])
+        )
+        .count()
     )
 
-    return user, loans, active_count, pending_count
+    pending_count = (
+        db.query(models.LoanApplication)
+        .filter(
+            models.LoanApplication._beneficiary_id == user.id,
+            models.LoanApplication.lifecycle_status.in_(
+                ["verification_required", "verification_pending"]
+            ),
+        )
+        .count()
+    )
+
+    return (user, loans, active_count, pending_count)
 
 
 
@@ -423,3 +436,151 @@ def list_verification_evidence_for_loan(
     """)
     rows = db.execute(q, {"loan_id": loan.id})
     return [dict(row._mapping) for row in rows]
+
+
+from sqlalchemy import text
+from typing import List, Optional
+
+from datetime import timezone
+
+def get_evidence_with_preview(db: Session, evidence_id: UUID) -> Optional[dict]:
+    """Get evidence with full file_path for preview"""
+    query = text("""
+        SELECT 
+            id,
+            evidence_type,
+            requirement_type,
+            file_name,
+            file_type,
+            file_size_bytes,
+            file_path,
+            ST_Y(capture_location::geometry) AS latitude,
+            ST_X(capture_location::geometry) AS longitude,
+            capture_address,
+            captured_at
+        FROM verification_evidence
+        WHERE id = :evidence_id
+    """)
+    
+    result = db.execute(query, {"evidence_id": evidence_id})
+    row = result.fetchone()
+    return dict(row._mapping) if row else None
+
+def list_evidence_with_previews(db: Session, loan_ref_no: str) -> list[dict]:
+    """List all evidence with file data for previews"""
+    loan = db.query(models.LoanApplication).filter(
+        models.LoanApplication.loan_ref_no == loan_ref_no
+    ).first()
+    
+    if not loan:
+        return []
+    
+    query = text("""
+        SELECT 
+            id,
+            evidence_type,
+            requirement_type,
+            file_name,
+            file_type,
+            file_size_bytes,
+            file_path AS file_data,
+            ST_Y(capture_location::geometry) AS latitude,
+            ST_X(capture_location::geometry) AS longitude,
+            capture_address,
+            captured_at
+        FROM verification_evidence
+        WHERE loan_application_id = :loan_id
+        ORDER BY captured_at DESC
+    """)
+    
+    result = db.execute(query, {"loan_id": loan.id})
+    return [dict(row._mapping) for row in result]
+
+def submit_verification_final(db: Session, loan_ref_no: str) -> models.LoanApplication:
+    """Final submission - moves from documents_uploaded to submitted"""
+    loan = db.query(models.LoanApplication).filter(
+        models.LoanApplication.loan_ref_no == loan_ref_no
+    ).first()
+    
+    if not loan:
+        raise ValueError("Loan not found")
+    
+    loan.verification_stage = models.VerificationStage.submitted
+    loan.submitted_at = datetime.now(timezone.utc)
+    loan.lifecycle_status = "verification_submitted"
+    
+    # Create tracking event
+    event = models.VerificationTrackingEvent(
+        loan_application_id=loan.id,
+        stage=models.VerificationStage.submitted,
+        description="Application submitted for verification"
+    )
+    db.add(event)
+    db.commit()
+    db.refresh(loan)
+    
+    return loan
+
+def get_application_tracking(db: Session, loan_ref_no: str) -> Optional[dict]:
+    """Get tracking status and events for an application"""
+    loan = db.query(models.LoanApplication).filter(
+        models.LoanApplication.loan_ref_no == loan_ref_no
+    ).first()
+    
+    if not loan:
+        return None
+    
+    events = db.query(models.VerificationTrackingEvent).filter(
+        models.VerificationTrackingEvent.loan_application_id == loan.id
+    ).order_by(models.VerificationTrackingEvent.created_at.desc()).all()
+    
+    video_call = db.query(models.VideoCallRequest).filter(
+        models.VideoCallRequest.loan_application_id == loan.id,
+        models.VideoCallRequest.status == 'pending'
+    ).first()
+    
+    return {
+        "loan_ref_no": loan.loan_ref_no,
+        "current_stage": loan.verification_stage,
+        "submitted_at": loan.submitted_at,
+        "reviewed_at": loan.reviewed_at,
+        "video_call_requested": video_call is not None,
+        "video_call_scheduled_for": video_call.scheduled_for if video_call else None,
+        "events": events
+    }
+
+def get_pending_video_calls(db: Session, user_mobile: str) -> list:
+    """Get pending video call requests for a user"""
+    user = db.query(models.User).filter(models.User.mobile == user_mobile).first()
+    if not user:
+        return []
+    
+    loans = db.query(models.LoanApplication).filter(
+        models.LoanApplication._beneficiary_id == user.id
+    ).all()
+    
+    loan_ids = [loan.id for loan in loans]
+    
+    calls = db.query(models.VideoCallRequest).filter(
+        models.VideoCallRequest.loan_application_id.in_(loan_ids),
+        models.VideoCallRequest.status == 'pending'
+    ).all()
+    
+    return calls
+
+
+def get_video_call_for_loan(db: Session, loan_ref_no: str):
+    """Get the pending video call request for a loan"""
+    loan = db.query(models.LoanApplication).filter(
+        models.LoanApplication.loan_ref_no == loan_ref_no
+    ).first()
+    
+    if not loan:
+        return None
+    
+    video_call = db.query(models.VideoCallRequest).filter(
+        models.VideoCallRequest.loan_application_id == loan.id,
+        models.VideoCallRequest.status == 'pending'
+    ).first()
+    
+    return video_call
