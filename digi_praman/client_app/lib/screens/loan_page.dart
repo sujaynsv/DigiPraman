@@ -8,6 +8,10 @@ import './loan_verification_page.dart';
 import '../services/api_service.dart';
 import './verification_placeholder_page.dart';
 import './user_profile_page.dart';
+import './application_tracking_page.dart';
+import './video_call_page.dart';
+
+
 
 class LoansPage extends StatefulWidget {
   final String mobile;
@@ -26,8 +30,9 @@ class LoansPage extends StatefulWidget {
 class _LoansPageState extends State<LoansPage> {
   late Future<Map<String, dynamic>> _summaryFuture;
   final AudioPlayer _audioPlayer = AudioPlayer();
-  late String _languageCode; // TTS language code like "en-IN"
+  late String _languageCode;
   String? _overrideUserName;
+  int _selectedTab = 0; // 0 = pending, 1 = submitted
 
   @override
   void initState() {
@@ -108,20 +113,95 @@ class _LoansPageState extends State<LoansPage> {
           final pending = data['pending_verification_count'] ?? 0;
           final loans = (data['loans'] as List<dynamic>?) ?? [];
 
+          for (var loan in loans) {
+            print('LOAN DEBUG: ref=${loan['loan_ref_no']}, stage=${loan['verification_stage']}, stage_type=${loan['verification_stage'].runtimeType}');
+          }
+
+          // Filter loans based on selected tab
+// Filter loans based on selected tab
+          final filteredLoans = loans.where((loan) {
+            // Get the verification_stage as a string directly (backend sends it as string value)
+            final stage = (loan['verification_stage'] as String?) ?? 'not_started';
+            
+            if (_selectedTab == 0) {
+              // Pending verification tab - show loans NOT yet submitted
+              return stage == 'not_started' ||
+                  stage == 'documents_uploaded';
+            } else {
+              // Submitted tab - show loans that ARE submitted
+              return stage == 'submitted' ||
+                  stage == 'under_review' ||
+                  stage == 'approved' ||
+                  stage == 'rejected' ||
+                  stage == 'video_verification_requested' ||
+                  stage == 'video_verification_completed';
+            }
+          }).toList();
+
+
           return SafeArea(
             child: Column(
               children: [
                 _buildHeader(userName, active, pending, data),
-                if (pending > 0) _buildWarningBanner(),
+                
+                // Tab bar
+                Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      _buildTab('Pending Verification', 0),
+                      const SizedBox(width: 4),
+                      _buildTab('Submitted', 1),
+                    ],
+                  ),
+                ),
+
+                if (pending > 0 && _selectedTab == 0) _buildWarningBanner(),
+                
                 Expanded(
-                  child: loans.isEmpty
-                      ? const Center(child: Text('No loans found'))
+                  child: filteredLoans.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                _selectedTab == 0 
+                                    ? Icons.assignment_outlined 
+                                    : Icons.check_circle_outline,
+                                size: 64,
+                                color: Colors.grey,
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                _selectedTab == 0
+                                    ? 'No pending verifications'
+                                    : 'No submitted applications',
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
                       : ListView.builder(
                           padding: const EdgeInsets.all(16),
-                          itemCount: loans.length,
+                          itemCount: filteredLoans.length,
                           itemBuilder: (context, index) {
                             final loan =
-                                loans[index] as Map<String, dynamic>;
+                                filteredLoans[index] as Map<String, dynamic>;
                             return _buildLoanCard(loan);
                           },
                         ),
@@ -130,6 +210,35 @@ class _LoansPageState extends State<LoansPage> {
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildTab(String label, int index) {
+    final isSelected = _selectedTab == index;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () {
+          setState(() {
+            _selectedTab = index;
+          });
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: isSelected ? Colors.green : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: isSelected ? Colors.white : Colors.grey,
+              fontSize: 13,
+              fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -164,7 +273,6 @@ class _LoansPageState extends State<LoansPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // Profile circle + greeting
               Row(
                 children: [
                   CircleAvatar(
@@ -184,8 +292,7 @@ class _LoansPageState extends State<LoansPage> {
                     children: [
                       const Text(
                         'Hello',
-                        style:
-                            TextStyle(color: Colors.white70, fontSize: 12),
+                        style: TextStyle(color: Colors.white70, fontSize: 12),
                       ),
                       Text(
                         userName,
@@ -199,7 +306,6 @@ class _LoansPageState extends State<LoansPage> {
                   ),
                 ],
               ),
-              // Mic, bell, profile icons
               Row(
                 children: [
                   IconButton(
@@ -213,9 +319,8 @@ class _LoansPageState extends State<LoansPage> {
                   IconButton(
                     icon: const Icon(Icons.person, color: Colors.white),
                     onPressed: () async {
-                      final loans =
-                          (summary['loans'] as List<dynamic>? ?? [])
-                              .cast<Map<String, dynamic>>();
+                      final loans = (summary['loans'] as List<dynamic>? ?? [])
+                          .cast<Map<String, dynamic>>();
 
                       final updatedName = await Navigator.push<String>(
                         context,
@@ -242,7 +347,6 @@ class _LoansPageState extends State<LoansPage> {
             ],
           ),
           const SizedBox(height: 16),
-          // Cards row: Active Loans / Pending Verification
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -294,7 +398,7 @@ class _LoansPageState extends State<LoansPage> {
 
   Widget _buildWarningBanner() {
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.red.shade50,
@@ -316,107 +420,201 @@ class _LoansPageState extends State<LoansPage> {
     );
   }
 
-  Widget _buildLoanCard(Map<String, dynamic> loan) {
-    final String ref = loan['loan_ref_no'] ?? '';
-    final String purpose = loan['purpose'] ?? '';
-    final String status = (loan['lifecycle_status'] ?? '').toString();
-    final double? amount = loan['sanctioned_amount'] is num
-        ? (loan['sanctioned_amount'] as num).toDouble()
-        : null;
-    final String nextEmi = loan['next_emi_date'] ?? '';
+Widget _buildLoanCard(Map<String, dynamic> loan) {
+  final String ref = loan['loan_ref_no'] ?? '';
+  final String purpose = loan['purpose'] ?? '';
+  final String lifecycleStatus = (loan['lifecycle_status'] ?? '').toString();
+  final String verificationStage = (loan['verification_stage'] as String?) ?? 'not_started';
+  final double? amount = loan['sanctioned_amount'] is num
+      ? (loan['sanctioned_amount'] as num).toDouble()
+      : null;
+  final String nextEmi = loan['next_emi_date'] ?? '';
 
-    String statusLabel;
-    Color statusColor;
-    if (status == 'verification_required') {
-      statusLabel = 'Verification Required';
-      statusColor = Colors.red;
-    } else if (status == 'verification_pending') {
-      statusLabel = 'Verification Pending';
-      statusColor = Colors.orange;
-    } else {
-      statusLabel = status.isEmpty ? 'Active' : status;
-      statusColor = Colors.green;
-    }
+  String statusLabel;
+  Color statusColor;
+  
+  if (verificationStage == 'video_verification_requested') {
+    statusLabel = 'Video Call Required';
+    statusColor = Colors.blue;
+  } else if (verificationStage == 'submitted' || verificationStage == 'under_review') {
+    statusLabel = 'Submitted';
+    statusColor = Colors.green;
+  } else if (verificationStage == 'approved') {
+    statusLabel = 'Approved';
+    statusColor = Colors.green;
+  } else if (verificationStage == 'rejected') {
+    statusLabel = 'Rejected';
+    statusColor = Colors.red;
+  } else if (verificationStage == 'video_verification_completed') {
+    statusLabel = 'Call Completed';
+    statusColor = Colors.purple;
+  } else if (lifecycleStatus == 'verification_required') {
+    statusLabel = 'Verification Required';
+    statusColor = Colors.red;
+  } else if (lifecycleStatus == 'verification_pending') {
+    statusLabel = 'Verification Pending';
+    statusColor = Colors.orange;
+  } else {
+    statusLabel = lifecycleStatus.isEmpty ? 'Active' : lifecycleStatus;
+    statusColor = Colors.green;
+  }
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: statusColor.withOpacity(0.4)),
-      ),
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Top row: ref + status pill
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  ref,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.green,
+  final bool isVideoCallRequired = verificationStage == 'video_verification_requested';
+  
+  final bool isSubmitted = verificationStage == 'submitted' ||
+      verificationStage == 'under_review' ||
+      verificationStage == 'approved' ||
+      verificationStage == 'rejected' ||
+      verificationStage == 'video_verification_requested' ||
+      verificationStage == 'video_verification_completed';
+
+  return Card(
+    margin: const EdgeInsets.only(bottom: 16),
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(12),
+      side: BorderSide(color: statusColor.withOpacity(0.4)),
+    ),
+    elevation: 2,
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                ref,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.green,
+                ),
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: statusColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  statusLabel,
+                  style: TextStyle(
+                    color: statusColor,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            purpose,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _infoColumn(
+                'Loan Amount',
+                amount != null ? '₹${amount.toStringAsFixed(0)}' : '-',
+              ),
+              _infoColumn('Next EMI', nextEmi.isNotEmpty ? nextEmi : '-'),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+                        onPressed: () async {
+            if (isVideoCallRequired) {
+              // Go to video call page
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => VideoCallPage(
+                    loanRefNo: ref,
                   ),
-                  child: Text(
-                    statusLabel,
-                    style: TextStyle(
-                      color: statusColor,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
+                ),
+              );
+              // Refresh on return
+              setState(() {
+                _summaryFuture = ApiService.fetchLoanSummary(widget.mobile);
+              });
+            } else if (isSubmitted) {
+              // Go to tracking page
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => ApplicationTrackingPage(
+                    loanRefNo: ref,
+                  ),
+                ),
+              );
+              setState(() {
+                _summaryFuture = ApiService.fetchLoanSummary(widget.mobile);
+              });
+            } else {
+              // Go to verification page
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => LoanVerificationPage(
+                    loanRefNo: ref,
+                  ),
+                ),
+              );
+              setState(() {
+                _summaryFuture = ApiService.fetchLoanSummary(widget.mobile);
+              });
+            }
+          },
+
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isVideoCallRequired
+                    ? Colors.blue
+                    : (isSubmitted ? Colors.blue : Colors.green),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    isVideoCallRequired
+                        ? Icons.videocam
+                        : (isSubmitted ? Icons.track_changes : Icons.upload_file),
+                    size: 18,
+                    color: Colors.white,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    isVideoCallRequired
+                        ? 'Start Video Verification'
+                        : (isSubmitted
+                            ? 'View Application Status'
+                            : 'Submit verification documents'),
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: Colors.white,
                     ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              purpose,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
+                ],
               ),
             ),
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                _infoColumn(
-                  'Loan Amount',
-                  amount != null ? '₹${amount.toStringAsFixed(0)}' : '-',
-                ),
-                _infoColumn('Next EMI', nextEmi.isNotEmpty ? nextEmi : '-'),
-              ],
-            ),
-            const SizedBox(height: 12),
-            TextButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => LoanVerificationPage(
-                      loanRefNo: ref,
-                    ),
-                  ),
-                );
-              },
-              child: const Text('Tap to submit verification documents'),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _infoColumn(String label, String value) {
     return Column(
@@ -460,13 +658,11 @@ class _LoansPageState extends State<LoansPage> {
               mainAxisSize: MainAxisSize.min,
               children: const [
                 SizedBox(height: 8),
-                Icon(Icons.notifications_none,
-                    size: 32, color: Colors.grey),
+                Icon(Icons.notifications_none, size: 32, color: Colors.grey),
                 SizedBox(height: 8),
                 Text(
                   'No pending verifications',
-                  style:
-                      TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                 ),
                 SizedBox(height: 12),
               ],
