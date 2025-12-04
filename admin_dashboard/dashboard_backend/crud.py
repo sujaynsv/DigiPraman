@@ -726,3 +726,71 @@ def get_applications(db: Session, search: Optional[str] = None,
         })
 
     return {"items": items}
+
+
+
+
+def get_application_detail(db: Session, application_id: UUID):
+    """
+    Return full detail of a single application (loan + beneficiary + risk).
+    """
+    query = text("""
+        SELECT
+            la.id,
+            la.loan_ref_no,
+            la.loan_type,
+            la.sanctioned_amount        AS loan_amount,
+            la.purpose,
+            la.lifecycle_status,
+            la.created_at,
+
+            u.name                      AS beneficiary_name,
+            u.mobile                    AS beneficiary_mobile,
+
+            vr.status::text             AS verification_status,
+            vr.submitted_at,
+
+            ra.risk_score,
+            ra.risk_tier,
+            ra.scores
+        FROM loan_applications la
+        JOIN users u ON u.id = la._beneficiary_id
+        LEFT JOIN verification_requests vr ON vr._loan_id = la.id
+        LEFT JOIN risk_analyses ra ON ra._verification_id = vr.id
+        WHERE la.id = :app_id
+        ORDER BY vr.created_at DESC NULLS LAST
+        LIMIT 1
+    """)
+
+    row = db.execute(query, {"app_id": str(application_id)}).mappings().first()
+
+    if not row:
+        return None
+
+    # Choose the best status source
+    status_source = row["lifecycle_status"] or row["verification_status"] or "pending"
+    status_slug = _status_slug(status_source)
+    status_label = _status_label(status_slug)
+
+    risk_score = float(row["risk_score"]) if row["risk_score"] is not None else None
+
+    return {
+        "id": str(row["id"]),
+        "loan_ref_no": row["loan_ref_no"],
+        "loan_type": row["loan_type"],
+        "loan_amount": float(row["loan_amount"] or 0),
+        "purpose": row["purpose"],
+        "status": status_slug,
+        "status_label": status_label,
+        "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+
+        "beneficiary_name": row["beneficiary_name"],
+        "beneficiary_mobile": row["beneficiary_mobile"],
+
+        "verification_status": row["verification_status"],
+        "submitted_at": row["submitted_at"].isoformat() if row["submitted_at"] else None,
+
+        "risk_score": risk_score,
+        "risk_tier": row["risk_tier"],
+        "scores": row["scores"] or {},   # JSON with breakdown (authenticity, etc.)
+    }

@@ -222,10 +222,17 @@ function Applications() {
                   <p className="cell-primary">{row.submitted}</p>
                 </div>
                 <div>
-                  <button type="button" className="view-link">
-                    View
-                  </button>
-                </div>
+                    <a
+                      className="view-link"
+                      href={`/applications/${row.key}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      View
+                    </a>
+                  </div>
+
+
               </li>
             ))}
           </ul>

@@ -104,4 +104,8 @@ export const testConnection = () => {
   return api.get('/');
 };
 
+
+export const getApplicationDetail = (id) =>
+  api.get(`/applications/${id}`);
+
 export default api;

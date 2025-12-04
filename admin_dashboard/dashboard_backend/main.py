@@ -204,6 +204,45 @@ def create_scheme(scheme: schemas.SchemeCreate, db: Session = Depends(get_db)):
 # APPLICATION ENDPOINTS
 # ============================================
 
+# @app.get("/applications/")
+# def list_applications(
+#     search: Optional[str] = Query(None),
+#     status: Optional[str] = Query("all"),
+#     risk_level: Optional[str] = Query("all"),
+#     skip: int = Query(0, ge=0),
+#     limit: int = Query(100, ge=1, le=200),
+#     db: Session = Depends(get_db)
+# ):
+#     """Get loan applications for the admin UI"""
+#     try:
+#         return crud.get_applications(
+#             db,
+#             search=search,
+#             status=status,
+#             risk_level=risk_level,
+#             skip=skip,
+#             limit=limit,
+#         )
+#     except Exception as e:
+#         print(f"❌ Error loading applications: {e}")
+#         raise HTTPException(status_code=500, detail="Unable to load applications")
+    
+
+
+    # @app.get("/applications/{application_id}")
+    # def get_application_detail(application_id: UUID, db: Session = Depends(get_db)):
+    #     """Get full details for a single application"""
+    #     try:
+    #         data = crud.get_application_detail(db, application_id)
+    #         if not data:
+    #             raise HTTPException(status_code=404, detail="Application not found")
+    #         return data
+    #     except HTTPException:
+    #         raise
+    #     except Exception as e:
+    #         print(f"❌ Error loading application detail: {e}")
+    #         raise HTTPException(status_code=500, detail="Unable to load application detail")
+
 @app.get("/applications/")
 def list_applications(
     search: Optional[str] = Query(None),
@@ -211,7 +250,7 @@ def list_applications(
     risk_level: Optional[str] = Query("all"),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=200),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Get loan applications for the admin UI"""
     try:
@@ -226,3 +265,20 @@ def list_applications(
     except Exception as e:
         print(f"❌ Error loading applications: {e}")
         raise HTTPException(status_code=500, detail="Unable to load applications")
+
+
+@app.get("/applications/{application_id}")
+def get_application_detail(application_id: UUID, db: Session = Depends(get_db)):
+    """
+    Get full detail for a single loan application.
+    """
+    try:
+        detail = crud.get_application_detail(db, application_id)
+        if not detail:
+            raise HTTPException(status_code=404, detail="Application not found")
+        return detail
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error loading application detail: {e}")
+        raise HTTPException(status_code=500, detail="Unable to load application detail")

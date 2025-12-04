@@ -1,13 +1,14 @@
 import { FaHome, FaBuilding, FaUsers, FaClipboardList, FaFileAlt } from 'react-icons/fa';
+import { NavLink } from 'react-router-dom';
 import './Sidebar.css';
 
-function Sidebar({ currentView, setCurrentView }) {
+function Sidebar({ currentView }) {
   const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: <FaHome /> },
-    { id: 'applications', label: 'Applications', icon: <FaFileAlt /> },
-    { id: 'organizations', label: 'Organizations', icon: <FaBuilding /> },
-    { id: 'users', label: 'Beneficiaries', icon: <FaUsers /> },
-    { id: 'schemes', label: 'Schemes', icon: <FaClipboardList /> },
+    { id: 'dashboard', label: 'Dashboard', icon: <FaHome />, to: '/' },
+    { id: 'applications', label: 'Applications', icon: <FaFileAlt />, to: '/applications' },
+    { id: 'organizations', label: 'Organizations', icon: <FaBuilding />, to: '/organizations' },
+    { id: 'users', label: 'Beneficiaries', icon: <FaUsers />, to: '/users' },
+    { id: 'schemes', label: 'Schemes', icon: <FaClipboardList />, to: '/schemes' },
   ];
 
   return (
@@ -17,14 +18,14 @@ function Sidebar({ currentView, setCurrentView }) {
       </div>
       <nav className="sidebar-nav">
         {menuItems.map((item) => (
-          <button
+          <NavLink
             key={item.id}
+            to={item.to}
             className={`nav-item ${currentView === item.id ? 'active' : ''}`}
-            onClick={() => setCurrentView(item.id)}
           >
             <span className="nav-icon">{item.icon}</span>
             <span className="nav-label">{item.label}</span>
-          </button>
+          </NavLink>
         ))}
       </nav>
     </aside>
