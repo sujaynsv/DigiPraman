@@ -3,6 +3,8 @@ from typing import Optional, Dict, Any
 from datetime import datetime
 from uuid import UUID
 from models import RoleType, VerificationStatus
+from typing import List
+
 
 # =====================================================
 # ORGANIZATION SCHEMAS
@@ -86,10 +88,45 @@ class SchemeResponse(SchemeBase):
 # STATS SCHEMAS
 # =====================================================
 
+class RiskBucket(BaseModel):
+    count: int
+    percentage: float
+
+
+class RiskDistribution(BaseModel):
+    low: RiskBucket
+    medium: RiskBucket
+    high: RiskBucket
+
+
+class RecentApplication(BaseModel):
+    application_id: str
+    loan_ref_no: str
+    applicant_name: str
+    loan_amount: float
+    risk_tier: str
+
+
 class StatsResponse(BaseModel):
-    total_organizations: int
-    total_users: int
-    total_beneficiaries: int
-    total_officers: int
-    total_admins: int
-    total_schemes: int
+    pending_review: int
+    approved: int
+    flagged: int
+    rejected: int
+
+    pending_review_change: float
+    approved_change: float
+    flagged_change: float
+    rejected_change: float
+
+    risk_distribution: RiskDistribution
+    recent_applications: List[RecentApplication]
+
+
+
+# class StatsResponse(BaseModel):
+#     total_organizations: int
+#     total_users: int
+#     total_beneficiaries: int
+#     total_officers: int
+#     total_admins: int
+#     total_schemes: int

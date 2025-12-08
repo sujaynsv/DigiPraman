@@ -18,3 +18,6 @@ env/
 build/
 dist/
 *.log
+
+dashboard_backend\venv
+dashboard_backend\.env
