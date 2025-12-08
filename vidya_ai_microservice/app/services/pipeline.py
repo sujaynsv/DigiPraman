@@ -14,7 +14,8 @@ from ..config import (
     WeightConfig,
     settings,
 )
-from ..schemas import EvidencePackage, ScoreBreakdown, ScoreResponse
+from .verification import VerificationService
+from ..schemas import EvidencePackage, ScoreBreakdown, ScoreResponse, VerificationResult
 from ..utils.media_loader import MediaLoader
 from ..utils.state import LocalStateStore
 from .aggregation import RiskAggregator
@@ -75,12 +76,42 @@ class VidyaAIPipeline:
         quality_results = quality_asset + quality_docs
 
         detection_results = self.detector.analyze(payload.asset_images, payload.metadata.declared_asset_type)
+        
+        # --- NEW: Mock Verification Checks ---
+        # 1. GST Checkmate (Invoice Number)
+        # We try to extract invoice number from OCR results, or use declared metadata if OCR fails/not run yet.
+        # Ideally we pull from OCR, but for simplicity we cross-check the declared_invoice_number if available (or assume extracted matches metadata).
+        # Let's verify the declared invoice number as a proxy for the OCR'd one.
+        # But wait, OCR runs below. Let's run OCR first.
+        
         ocr_results = self.ocr.process_documents(
             payload.doc_images,
             payload.metadata.declared_vendor,
             payload.metadata.declared_invoice_amount,
             payload.metadata.declared_invoice_date,
         )
+
+        # Extract invoice number from metadata (simulating "OCR extracted number")
+        # In a real app, OCRResult would return the specific Invoice # field.
+        # For this hackathon, we assume the 'declared_custom_metadata' or just use a placeholder from metadata if valid.
+        target_invoice = payload.metadata.custom_metadata.get("invoice_number")
+        target_gstin = payload.metadata.custom_metadata.get("gstin")  # Extract GSTIN if provided
+        
+        gst_result = VerificationService.verify_gst_invoice(target_invoice, target_gstin)
+        bank_result = VerificationService.verify_bank_sanction(
+            payload.metadata.applicant_id, 
+            payload.metadata.declared_asset_type
+        )
+        
+        verification_summary = VerificationResult(
+            gst_verified=gst_result["verified"],
+            gst_details=gst_result,
+            bank_match=bank_result["match"],
+            bank_details=bank_result
+        )
+        
+        # --- End New Checks ---
+
         duplicate_asset = self.duplicates.evaluate_images(payload.asset_images, payload.metadata.applicant_id, payload.case_id)
         duplicate_docs = self.duplicates.evaluate_documents(payload.doc_images, payload.metadata.applicant_id, payload.case_id)
         duplicate_results = duplicate_asset + duplicate_docs
@@ -109,6 +140,7 @@ class VidyaAIPipeline:
             duplicates=duplicate_results,
             fraud_features=feature_vector,
             xgboost=fraud_score,
+            verification=verification_summary  # Add here
         )
 
         explanation: Dict[str, object] = {
@@ -119,6 +151,7 @@ class VidyaAIPipeline:
             "fraud_features": feature_vector.model_dump(),
             "fraud_score": fraud_score.model_dump(),
             "aggregation_components": aggregate["components"],
+            "verification": verification_summary.model_dump() # And here
         }
 
         return ScoreResponse(
@@ -128,6 +161,7 @@ class VidyaAIPipeline:
             risk_tier=aggregate["risk_tier"],
             routing_decision=aggregate["routing_decision"],
             full_explanation=explanation,
+            verification_summary=verification_summary # And here
         )
 
 

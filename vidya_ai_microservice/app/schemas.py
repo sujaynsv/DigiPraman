@@ -124,6 +124,13 @@ class FraudScoreResult(BaseModel):
     rule_penalties: Dict[str, float] = Field(default_factory=dict)
 
 
+class VerificationResult(BaseModel):
+    gst_verified: bool
+    gst_details: Dict[str, Any]
+    bank_match: bool
+    bank_details: Dict[str, Any]
+
+
 class ScoreBreakdown(BaseModel):
     image_quality: List[ImageQualityResult]
     asset_match: List[ObjectDetectionResult]
@@ -131,6 +138,7 @@ class ScoreBreakdown(BaseModel):
     duplicates: List[DuplicateResult]
     fraud_features: FraudFeatureVector
     xgboost: FraudScoreResult
+    verification: Optional[VerificationResult] = None
 
 
 class ScoreResponse(BaseModel):
@@ -140,6 +148,7 @@ class ScoreResponse(BaseModel):
     risk_tier: Literal["auto-approve", "officer-review", "video-verify"]
     routing_decision: str
     full_explanation: Dict[str, Any]
+    verification_summary: Optional[VerificationResult] = None
 
 
 class WeightUpdateRequest(BaseModel):
