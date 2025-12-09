@@ -350,7 +350,7 @@ class MeetingRequest(BaseModel):
 
 @app.post("/applications/schedule-meet")
 def schedule_meeting(payload: MeetingRequest):
-    room_link = "https://meet.jit.si/LoanRoom-undefined"
+    room_link = f"https://meet.jit.si/LoanRoom-undefined"
     message_text = f"The loan verification meeting is scheduled today at 5pm here is the link: {room_link}"
 
     try:
@@ -364,3 +364,4 @@ def schedule_meeting(payload: MeetingRequest):
     except Exception as e:
         print(e)
         raise HTTPException(status_code=500, detail="SMS failed")
+
