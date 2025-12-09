@@ -337,3 +337,30 @@ def application_status_action(
         "id": str(updated.id),
         "status": updated.lifecycle_status,
     }
+
+from twilio.rest import Client
+
+TWILIO_SID = "ACeb88fd71370823119bc77a9709bc9490"
+TWILIO_AUTH = "19667ac3efe9b95190046e4419e4163a"
+TWILIO_NUMBER = "+17076647532"  
+# MessagingServiceSid = "MG6c62893a41d7645a24f458f7cd8a75a1"
+class MeetingRequest(BaseModel):
+    app_id: str
+
+
+@app.post("/applications/schedule-meet")
+def schedule_meeting(payload: MeetingRequest):
+    room_link = "https://meet.jit.si/LoanRoom-undefined"
+    message_text = f"The loan verification meeting is scheduled today at 5pm here is the link: {room_link}"
+
+    try:
+        client = Client(TWILIO_SID, TWILIO_AUTH)
+        msg = client.messages.create(
+            from_=TWILIO_NUMBER,
+            to="+917386545459",   # Fixed number as requested
+            body=message_text
+        )
+        return {"success": True, "message": "SMS sent", "sid": msg.sid}
+    except Exception as e:
+        print(e)
+        raise HTTPException(status_code=500, detail="SMS failed")

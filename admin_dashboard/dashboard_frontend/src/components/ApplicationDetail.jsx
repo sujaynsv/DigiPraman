@@ -165,23 +165,68 @@ export default function ApplicationDetail() {
         </div>
       )}
 
-      {/* ---------- ACTION BUTTONS ---------- */}
-      {showActions && (
-        <div className="action-buttons">
-          <button className="approve" onClick={() => handleAction("approve")}>Approve</button>
-          <button className="request" onClick={() => handleAction("needs_more")}>Request More Info</button>
-          <button className="reject" onClick={() => handleAction("reject")}>Reject</button>
+     {/* ---------- ACTION BUTTONS ---------- */}
 
-          {riskTier === "high" && (
-            <button
-              onClick={() => window.open(`/jitsi/${data.id}`, "_blank")}
-              className="video-btn"
-            >
-              Start Video Verification 🔴
-            </button>
-          )}
-        </div>
-      )}
+<div className="action-buttons">
+
+  {/* Buttons shown only when not already finalized */}
+  {status !== "approved" && status !== "rejected" && (
+    <>
+      <button className="approve" onClick={() => handleAction("approve")}>Approve</button>
+      <button className="request" onClick={() => handleAction("needs_more")}>Request More Info</button>
+      <button className="reject" onClick={() => handleAction("reject")}>Reject</button>
+    </>
+  )}
+
+  {/* Show schedule meeting only when application is rejected */}
+  {status === "rejected" && (
+    <button
+      style={{
+        background:"#6c63ff",
+        color:"#fff",
+        padding:"10px 18px",
+        borderRadius:"8px",
+        marginLeft:"10px",
+        fontWeight:"600"
+      }}
+      onClick={async () => {
+        try {
+          const meetingUrl = `https://meet.jit.si/LoanRoom-undefined`;
+          await api.post("/applications/schedule-meet", {
+            app_id: data.id,
+            mobile: data.beneficiary?.mobile, // send mobile dynamically
+            link: meetingUrl
+          });
+          alert("Meeting scheduled & SMS sent!");
+        } catch {
+          alert("Failed to send SMS");
+        }
+      }}
+    >
+      Schedule Meeting 📩
+    </button>
+  )}
+
+  {/* High risk applicant → enable immediate video verification */}
+  {riskTier === "high" && (
+    <button
+      onClick={() => window.open(`/jitsi/${data.id}`, "_blank")}
+      className="video-btn"
+      style={{
+        background:"red",
+        color:"#fff",
+        padding:"10px 18px",
+        borderRadius:"8px",
+        marginLeft:"10px",
+        fontWeight:"600"
+      }}
+    >
+      Start Video Verification 🔴
+    </button>
+  )}
+
+</div>
+
     </div>
   );
 }
