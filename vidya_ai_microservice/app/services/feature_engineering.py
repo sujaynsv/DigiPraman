@@ -136,7 +136,18 @@ class FeatureEngineer:
     def _rapid_submission_ratio(self, timestamps: List[str]) -> float:
         if len(timestamps) < 2:
             return 0.0
-        parsed = sorted(datetime.fromisoformat(ts) for ts in timestamps)
+        parsed_all = []
+        for ts in timestamps:
+             try:
+                 dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                 # FORCE NAIVE
+                 parsed_all.append(dt.replace(tzinfo=None))
+             except Exception:
+                 continue
+        
+        parsed = sorted(parsed_all)
+        if len(parsed) < 2: return 0.0
+
         intervals = [
             (parsed[idx] - parsed[idx - 1]).total_seconds() / 3600 for idx in range(1, len(parsed))
         ]

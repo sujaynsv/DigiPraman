@@ -3,14 +3,14 @@
   "asset_images": [
     {
       "id": "asset-img-1",
-      "url": "http://127.0.0.1:9000/media/tractor.jpg",
-      "declared_asset_type": "tractor"
+      "url": "http://127.0.0.1:9000/media/fan.jpeg",
+      "declared_asset_type": "ceiling fan"
     }
   ],
   "doc_images": [
     {
       "id": "doc-img-1",
-      "url": "http://127.0.0.1:9000/media/invoice.jpg",
+      "url": "http://127.0.0.1:9000/media/fan_invoice.jpg.jpeg",
       "document_type": "invoice"
     }
   ],
@@ -18,11 +18,11 @@
   "metadata": {
     "case_id": "CASE-VIDYA-001",
     "applicant_id": "APPLICANT-123",
-    "declared_loan_amount": 250000,
-    "declared_asset_type": "tractor",
-    "declared_vendor": "Agri Supplies",
-    "declared_invoice_amount": 245000,
-    "declared_invoice_date": "2025-01-05T00:00:00Z",
+    "declared_loan_amount": 2500,
+    "declared_asset_type": "ceiling fan",
+    "declared_vendor": "QWIK",
+    "declared_invoice_amount": 2340.0,
+    "declared_invoice_date": "2025-07-15T00:00:00Z",
     "submission_device_id": "device-abc",
     "submission_location": {
       "lat": 17.438139,
@@ -38,8 +38,7 @@
       "submitted_cases": 1
     },
     "custom_metadata": {
-      "invoice_number": "INV-2025-001",
-      "gstin": "38331070563030"
+      "invoice_number": "G318PCCISS1"
     }
   }
 }

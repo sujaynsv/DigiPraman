@@ -25,6 +25,7 @@ from .hashing import DuplicateDetector
 from .object_detection import ObjectDetectionService
 from .ocr_processing import DocumentOCRService
 from .quality import ImageQualityAnalyzer
+from .forensics import ForensicService
 
 
 class VidyaAIPipeline:
@@ -41,6 +42,7 @@ class VidyaAIPipeline:
         fraud_rules: FraudRuleConfig,
     ):
         self.loader = MediaLoader()
+        self.forensics = ForensicService() # New Forensic Layer
         self.duplicate_state = LocalStateStore(settings.duplicate_state_path)
         self.device_state = self.duplicate_state  # reuse same store for simplicity
 
@@ -74,6 +76,20 @@ class VidyaAIPipeline:
         quality_asset = self.quality.analyze_batch(payload.asset_images)
         quality_docs = self.quality.analyze_batch(payload.doc_images)
         quality_results = quality_asset + quality_docs
+
+        # --- Forensic Analysis (Fake Invoice AI) ---
+        forensic_results = []
+        for doc in payload.doc_images:
+            try:
+                raw_bytes = self.loader.load_image_bytes(doc)
+                result = self.forensics.analyze_invoice(raw_bytes)
+                forensic_results.append({
+                    "doc_id": doc.id,
+                    "result": result
+                })
+            except Exception as e:
+                forensic_results.append({"doc_id": doc.id, "error": str(e)})
+        # -------------------------------------------
 
         detection_results = self.detector.analyze(payload.asset_images, payload.metadata.declared_asset_type)
         
@@ -131,6 +147,7 @@ class VidyaAIPipeline:
             ocr_results=ocr_results,
             duplicates=duplicate_results,
             fraud_score=fraud_score,
+            verification=verification_summary, # Added verification
         )
 
         breakdown = ScoreBreakdown(
@@ -140,28 +157,35 @@ class VidyaAIPipeline:
             duplicates=duplicate_results,
             fraud_features=feature_vector,
             xgboost=fraud_score,
-            verification=verification_summary  # Add here
+            verification=verification_summary,
+            forensics=forensic_results # Add here
         )
 
-        explanation: Dict[str, object] = {
-            "image_quality": [result.model_dump() for result in quality_results],
-            "object_detection": [result.model_dump() for result in detection_results],
-            "ocr": [result.model_dump() for result in ocr_results],
-            "duplicates": [result.model_dump() for result in duplicate_results],
-            "fraud_features": feature_vector.model_dump(),
-            "fraud_score": fraud_score.model_dump(),
-            "aggregation_components": aggregate["components"],
-            "verification": verification_summary.model_dump() # And here
-        }
+        # Build decision reasons for developers
+        decision_reasons = []
+        if aggregate["final_risk_score"] >= 80.0:
+            decision_reasons.append("High Fraud Probability (XGBoost)")
+        if verification_summary and not verification_summary.gst_verified:
+            decision_reasons.append(f"GST Verification Failed: {verification_summary.gst_details.get('reason')}")
+        if verification_summary and not verification_summary.bank_match:
+            decision_reasons.append("Bank Sanction Mismatch")
+        
+        # Add Forensic reasons
+        for res in forensic_results:
+            if "result" in res and res["result"]["label"] in ["forged", "suspicious"]:
+                decision_reasons.append(f"Forensic Alert ({res['result']['label']}): {', '.join(res['result']['reasons'][:2])}")
+        for dup in duplicate_results:
+            if dup.duplicate_found:
+                decision_reasons.append(f"Duplicate Image Found (Distance: {dup.hash_distance})")
 
         return ScoreResponse(
             case_id=payload.case_id,
-            scores=breakdown,
             final_risk_score=aggregate["final_risk_score"],
             risk_tier=aggregate["risk_tier"],
             routing_decision=aggregate["routing_decision"],
-            full_explanation=explanation,
-            verification_summary=verification_summary # And here
+            verification_summary=verification_summary,
+            decision_reasons=decision_reasons,
+            scores=breakdown,
         )
 
 

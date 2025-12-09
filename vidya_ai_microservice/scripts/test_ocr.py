@@ -11,7 +11,7 @@ def test_ocr():
 
     # Load sample image (tractor.jpg or invoice.jpg)
     # We'll use a dummy small image if file not found, but better to use real one
-    image_path = "data/media/invoice.jpg"
+    image_path = "data/media/fan_invoice.jpg.jpeg"
     if not os.path.exists(image_path):
         print(f"Error: {image_path} not found")
         return
@@ -35,7 +35,13 @@ def test_ocr():
     try:
         resp = requests.post(api_url, json=body, timeout=10)
         print(f"Status: {resp.status_code}")
-        print(f"Response: {resp.text[:500]}")
+        data = resp.json()
+        if "responses" in data and data["responses"]:
+            print("\n--- EXTRACTED TEXT ---\n")
+            print(data["responses"][0].get("fullTextAnnotation", {}).get("text", "NO TEXT FOUND"))
+            print("\n----------------------\n")
+        else:
+            print(f"Response: {resp.text[:500]}")
     except Exception as e:
         print(f"Exception: {e}")
 

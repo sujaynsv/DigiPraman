@@ -139,16 +139,23 @@ class ScoreBreakdown(BaseModel):
     fraud_features: FraudFeatureVector
     xgboost: FraudScoreResult
     verification: Optional[VerificationResult] = None
+    forensics: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class ScoreResponse(BaseModel):
     case_id: str
-    scores: ScoreBreakdown
     final_risk_score: float
     risk_tier: Literal["auto-approve", "officer-review", "video-verify"]
     routing_decision: str
-    full_explanation: Dict[str, Any]
+    # verification_summary: Optional[VerificationResult] = None # Keep this, it's important
     verification_summary: Optional[VerificationResult] = None
+    
+    # Critical reasons for the decision (Simpler for devs)
+    decision_reasons: List[str] = Field(default_factory=list)
+    
+    # Detailed breakdown (Optional / secondary)
+    scores: ScoreBreakdown
+    # full_explanation: Dict[str, Any]  <-- REMOVED (Redundant & Huge)
 
 
 class WeightUpdateRequest(BaseModel):

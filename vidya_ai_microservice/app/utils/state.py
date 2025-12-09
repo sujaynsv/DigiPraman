@@ -48,6 +48,7 @@ class LocalStateStore:
     def record_device_usage(self, device_id: Optional[str], timestamp: datetime, window_days: int = 7) -> int:
         if not device_id:
             return 0
+        timestamp = timestamp.replace(tzinfo=None)
         with self._lock:
             devices = self._state.setdefault("devices", {})
             device_state = devices.setdefault(device_id, {"events": []})

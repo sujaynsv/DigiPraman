@@ -6,10 +6,8 @@ import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-try:
-    from google.cloud import vision  # type: ignore
-except Exception:  # pragma: no cover - API optional
-    vision = None
+# try-import removed
+vision = None
 
 from ..config import OCRConfig, settings
 from ..schemas import EvidenceDocument, OCRResult
@@ -71,26 +69,17 @@ class DocumentOCRService:
         text = ""
         confidence = 0.0
         
-        # Strategy 1: Google Cloud Client (Service Account)
-        if self.client:
-            try:
-                image = vision.Image(content=payload)
-                response = self.client.document_text_detection(image=image)
-                if not response.error.message:
-                    text = response.full_text_annotation.text
-                    confidences = [s.confidence for p in response.full_text_annotation.pages for b in p.blocks for paragraph in b.paragraphs for word in paragraph.words for s in word.symbols]
-                    confidence = float(sum(confidences) / len(confidences)) if confidences else 0.8
-            except Exception:
-                pass
-
-        # Strategy 2: REST API (API Key)
+        # Strategy 1: REST API (API Key) - PREFERRED for simplicity in this env
         if not text and settings.google_api_key:
             import requests
             import base64
             
             try:
-                api_url = f"https://vision.googleapis.com/v1/images:annotate?key={settings.google_api_key}"
-                print(f"DEBUG: Calling Google Vision API at {api_url[:40]}...")
+                # Use strict string replacement to ensure no accidental quotes
+                key = str(settings.google_api_key).strip('"').strip("'")
+                api_url = f"https://vision.googleapis.com/v1/images:annotate?key={key}"
+                print(f"DEBUG: Calling Google Vision API (REST) at {api_url[:40]}...")
+                
                 b64_image = base64.b64encode(payload).decode("utf-8")
                 body = {
                     "requests": [
@@ -106,10 +95,27 @@ class DocumentOCRService:
                     responses = data.get("responses", [])
                     if responses and "fullTextAnnotation" in responses[0]:
                         text = responses[0]["fullTextAnnotation"]["text"]
-                        # Simple confidence approximation since REST response structure is deep
-                        confidence = 0.9 
-            except Exception:
-                pass
+                        confidence = 0.95
+                        print(f"DEBUG: OCR Success. Extracted {len(text)} chars.")
+                    else:
+                        print("DEBUG: OCR returned 200 but no text found.")
+                else:
+                    print(f"DEBUG: OCR Failed via REST. Status: {resp.status_code}, Body: {resp.text[:200]}")
+            except Exception as e:
+                print(f"DEBUG: OCR REST Exception: {e}")
+
+        # Strategy 2: Google Cloud Client (Service Account) - FALLBACK
+        if not text and self.client:
+            try:
+                print("DEBUG: Attempting Google Cloud Vision Client...")
+                image = vision.Image(content=payload)
+                response = self.client.document_text_detection(image=image)
+                if not response.error.message:
+                    text = response.full_text_annotation.text
+                    confidences = [s.confidence for p in response.full_text_annotation.pages for b in p.blocks for paragraph in b.paragraphs for word in paragraph.words for s in word.symbols]
+                    confidence = float(sum(confidences) / len(confidences)) if confidences else 0.8
+            except Exception as e:
+                print(f"DEBUG: OCR Client Exception: {e}")
 
         # Strategy 3: Fallback
         if not text:
@@ -190,7 +196,10 @@ class DocumentOCRService:
         date_match = True
         parsed_date_value = self._normalize_date(parsed.get("date"))
         if declared_date and parsed_date_value:
-            delta_days = abs((parsed_date_value - declared_date).days)
+            # Ensure BOTH are naive
+            declared_naive = declared_date.replace(tzinfo=None)
+            parsed_naive = parsed_date_value.replace(tzinfo=None)
+            delta_days = abs((parsed_naive - declared_naive).days)
             date_match = delta_days <= self.config.date_tolerance_days
         if declared_date and not date_match:
             penalties["date_mismatch"] = self.config.date_penalty
