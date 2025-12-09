@@ -16,6 +16,7 @@ class VerificationReviewPage extends StatefulWidget {
 
 class _VerificationReviewPageState extends State<VerificationReviewPage> {
   late Future<List<Map<String, dynamic>>> _evidenceFuture;
+  bool _uploading = false;
   bool _submitting = false;
 
   @override
@@ -24,13 +25,73 @@ class _VerificationReviewPageState extends State<VerificationReviewPage> {
     _evidenceFuture = ApiService.listEvidenceFull(widget.loanRefNo);
   }
 
+  void _showSuccess(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 4),
+      ),
+    );
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 4),
+      ),
+    );
+  }
+
+  Future<void> _submitVerification() async {
+    setState(() => _uploading = true);
+
+    try {
+      // 1. Submit verification evidence
+      await ApiService.submitVerification(widget.loanRefNo);
+
+      // 2. Trigger VIDYA AI risk scoring
+      final vidyaResult = await ApiService.runVidyaForLoanRef(widget.loanRefNo);
+
+      final riskTier = vidyaResult['risk_tier'] ?? 'unknown';
+      final riskScore = vidyaResult['final_risk_score']?.toString() ?? '-';
+
+      _showSuccess(
+        'Verification submitted.\nRisk tier: $riskTier (score $riskScore)',
+      );
+
+      Navigator.pop(context, vidyaResult);
+    } catch (e) {
+      _showError('Failed to submit verification or run risk checks: $e');
+    } finally {
+      setState(() => _uploading = false);
+    }
+  }
+
   Future<void> _submitFinal() async {
     setState(() => _submitting = true);
     try {
+      // Submit verification first
       await ApiService.submitVerificationFinal(widget.loanRefNo);
+
+      // Trigger VIDYA AI risk scoring
+      final vidyaResult = await ApiService.runVidyaForLoanRef(widget.loanRefNo);
+
+      final riskTier = vidyaResult['risk_tier'] ?? 'unknown';
+      final riskScore = vidyaResult['final_risk_score']?.toString() ?? '-';
+
       if (!mounted) return;
+
+      _showSuccess(
+        'Submitted successfully!\nRisk tier: $riskTier (score $riskScore)',
+      );
+
+      // Navigate to tracking page after short delay
+      await Future.delayed(const Duration(seconds: 2));
       
-      // Navigate to tracking page
+      if (!mounted) return;
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -39,9 +100,7 @@ class _VerificationReviewPageState extends State<VerificationReviewPage> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to submit. Please try again.')),
-      );
+      _showError('Failed to submit: $e');
       setState(() => _submitting = false);
     }
   }
@@ -287,7 +346,7 @@ class _VerificationReviewPageState extends State<VerificationReviewPage> {
             backgroundColor: Colors.green,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           ),
-          child: const Text('Preview', style: TextStyle(fontSize: 12)),
+          child: const Text('Preview', style: TextStyle(fontSize: 12, color: Colors.white)),
         ),
       ),
     );

@@ -1,6 +1,7 @@
 """Mock Verification Services for Jury Defense (Simulating Ext. APIs)."""
 
 from typing import Dict, Optional
+from app.services.mock_data import STATE_CODES, VALID_GST_INVOICES, SANCTIONED_LOANS
 
 class VerificationService:
     """
@@ -18,46 +19,15 @@ class VerificationService:
     GST_REGEX = re.compile(r"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$")
 
     # Valid State Codes (2025 List subset)
-    STATE_CODES = {
-        "36": "Telangana",
-        "37": "Andhra Pradesh",
-        "29": "Karnataka",
-        "27": "Maharashtra",
-        "33": "Tamil Nadu",
-        "07": "Delhi",
-        "09": "Uttar Pradesh"
-    }
+    STATE_CODES = STATE_CODES
 
     # 1. GST Portal Mock (Valid Invoices)
     # Updated with Valid GSTINs
-    VALID_GST_INVOICES = {
-        "INV-2025-001": {
-            "vendor": "Agri Supplies", 
-            "amount": 245000.0, 
-            "date": "2025-01-05",
-            "gstin": "36AAACA1234A1Z5"  # Telangana
-        },
-        "INV-2025-002": {
-            "vendor": "Kisan World", 
-            "amount": 550000.0, 
-            "date": "2025-01-10",
-            "gstin": "37BBBCB5678B1Z9"  # Andhra
-        },
-        "GST-999-XYZ": {
-            "vendor": "Fake Vendor", 
-            "amount": 12000.0, 
-            "date": "2025-02-01",
-            "gstin": "99ZZZZZ9999Z1Z1"  # Invalid State 99
-        }
-    }
+    VALID_GST_INVOICES = VALID_GST_INVOICES
 
     # 2. Bank Core System Mock (Sanctioned Loans)
     # Maps Applicant ID -> Asset Type they are allowed to buy
-    SANCTIONED_LOANS = {
-        "APPLICANT-123": {"allowed_asset": "tractor", "max_amount": 500000.0},
-        "APPLICANT-456": {"allowed_asset": "harvester", "max_amount": 1500000.0},
-        "APPLICANT-789": {"allowed_asset": "pumpset", "max_amount": 30000.0},
-    }
+    SANCTIONED_LOANS = SANCTIONED_LOANS
 
     @classmethod
     def validate_gstin_structure(cls, gstin: str) -> Dict[str, object]:

@@ -5,6 +5,8 @@ from __future__ import annotations
 from statistics import mean
 from typing import Dict, List
 
+from pyparsing import Optional
+
 from ..config import ThresholdConfig, WeightConfig
 from ..schemas import (
     DuplicateResult,
@@ -12,6 +14,7 @@ from ..schemas import (
     ImageQualityResult,
     ObjectDetectionResult,
     OCRResult,
+    VerificationResult,
 )
 
 
@@ -32,6 +35,7 @@ class RiskAggregator:
         ocr_results: List[OCRResult],
         duplicates: List[DuplicateResult],
         fraud_score: FraudScoreResult,
+        verification: Optional[VerificationResult] = None,  # Added verification
     ) -> Dict[str, float | str]:
         components = self._components(quality, detection, ocr_results, duplicates, fraud_score)
         total_weight = self.weights.total()
@@ -43,7 +47,26 @@ class RiskAggregator:
             + self.weights.fraud_score_weight * components["fraud"]
         )
         final_score = round(weighted_sum / total_weight, 2)
+        
+        # --- KNOCKOUT RULES (Overrides) ---
+        # 1. High Fraud Model Score (XGBoost)
+        # If the ML model says it's > 80% fraud, we cannot auto-approve.
+        fraud_knockout = components["fraud"] > 80.0
+        
+        # 2. Verification Failure (Mock GST/Bank)
+        verification_fail = False
+        if verification:
+             if not verification.gst_verified or not verification.bank_match:
+                 verification_fail = True
+
         risk_tier = self._risk_tier(final_score)
+        
+        # Apply Overrides
+        if fraud_knockout or verification_fail:
+             # Force highest risk tier regardless of average score
+             risk_tier = "video-verify"
+             # Optionally bump final score to 100 to reflect rejection
+             final_score = 100.0
 
         return {
             "final_risk_score": final_score,

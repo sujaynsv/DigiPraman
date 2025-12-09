@@ -3,14 +3,14 @@
   "asset_images": [
     {
       "id": "asset-img-1",
-      "url": "http://127.0.0.1:9000/media/tractor.jpg",
+      "url": "http://127.0.0.1:9000/media/fan.jpeg",
       "declared_asset_type": "tractor"
     }
   ],
   "doc_images": [
     {
       "id": "doc-img-1",
-      "url": "http://127.0.0.1:9000/media/invoice.jpg",
+      "url": "http://127.0.0.1:9000/media/fan_invoice.jpg.jpeg",
       "document_type": "invoice"
     }
   ],

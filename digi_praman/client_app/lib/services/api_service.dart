@@ -8,7 +8,7 @@ class ApiService {
   // For iOS Simulator: use localhost
   // For Android Emulator: use 10.0.2.2
   // For physical device: use your computer's IP address
-static const String baseUrl = 'https://7657ebfd7826.ngrok-free.app';
+static const String baseUrl = 'https://1a39c8b1f24c.ngrok-free.app';
 
   
   // Test connection
@@ -295,9 +295,37 @@ static Future<Map<String, dynamic>> startVideoCall(String loanRefNo) async {
   }
 }
 
+static Future<Map<String, dynamic>> fetchVideoCallForLoanRef(String loanRefNo) async {
+  final resp = await http.get(
+    Uri.parse('$baseUrl/admin/video-calls/by-ref/$loanRefNo'),
+  );
+  if (resp.statusCode != 200) {
+    throw Exception('No video call for this loan');
+  }
+  return jsonDecode(resp.body) as Map<String, dynamic>;
+}
 
 
 
+static Future<Map<String, dynamic>> runVidyaForLoan(String loanId) async {
+  final resp = await http.post(
+    Uri.parse('$baseUrl/loans/$loanId/run-vidya'),
+  );
+  if (resp.statusCode != 200) {
+    throw Exception('VIDYA pipeline failed: ${resp.body}');
+  }
+  return jsonDecode(resp.body) as Map<String, dynamic>;
+}
+
+static Future<Map<String, dynamic>> runVidyaForLoanRef(String loanRefNo) async {
+  final resp = await http.post(
+    Uri.parse('$baseUrl/loans/by-ref/$loanRefNo/run-vidya'),
+  );
+  if (resp.statusCode != 200) {
+    throw Exception('VIDYA pipeline failed: ${resp.body}');
+  }
+  return jsonDecode(resp.body) as Map<String, dynamic>;
+}
 
 
 }

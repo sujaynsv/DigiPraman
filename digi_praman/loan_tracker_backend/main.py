@@ -648,3 +648,69 @@ def start_video_call(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+
+from typing import Dict, Any, List
+from models import LoanApplication, VerificationEvidence
+from vidya_client import score_case
+from vidya_mapper import build_evidence_package
+
+@app.post("/loans/by-ref/{loan_ref}/run-vidya")
+async def run_vidya_for_loan_ref(
+    loan_ref: str,
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    loan: LoanApplication | None = (
+        db.query(LoanApplication)
+        .filter(LoanApplication.loan_ref_no == loan_ref)
+        .first()
+    )
+    if not loan:
+        raise HTTPException(status_code=404, detail="Loan not found")
+
+    evidences: List[VerificationEvidence] = (
+        db.query(VerificationEvidence)
+        .filter(VerificationEvidence.loan_application_id == loan.id)
+        .all()
+    )
+    if not evidences:
+        raise HTTPException(status_code=400, detail="No evidences for this loan")
+
+    evidence_package = build_evidence_package(loan, evidences)
+
+    try:
+        vidya_response = await score_case(evidence_package)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"VIDYA AI error: {exc}") from exc
+
+    final_score = float(vidya_response.get("final_risk_score", 0.0))
+    risk_tier = vidya_response.get("risk_tier", "officer-review")
+    routing_decision = vidya_response.get("routing_decision", "")
+
+    loan.risk_score_json = vidya_response
+    loan.risk_tier = risk_tier
+
+    # Update your workflow based on VIDYA decision
+    if risk_tier == "auto-approve":
+        loan.verification_stage = models.VerificationStage.approved
+        loan.lifecycle_status = "approved"
+    elif risk_tier == "video-verify":
+        loan.verification_stage = models.VerificationStage.video_verification_requested
+        loan.lifecycle_status = "verification_pending"
+    else:
+        loan.verification_stage = models.VerificationStage.under_review
+        loan.lifecycle_status = "verification_pending"
+
+    db.commit()
+    db.refresh(loan)
+    # Add this line in your endpoint for debugging:
+    print(f"VIDYA Response for {vidya_response}")
+
+    return {
+        "loan_id": str(loan.id),
+        "loan_ref_no": loan.loan_ref_no,
+        "risk_tier": risk_tier,
+        "final_risk_score": final_score,
+        "routing_decision": routing_decision,
+        "vidya_response": vidya_response,
+    }
+

@@ -92,6 +92,12 @@ def _is_module_available(module_name: str) -> bool:
         return False
 
 
+
+
+
+
 app = create_app()
 
 __all__ = ["app", "create_app"]
+
+

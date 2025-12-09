@@ -11,7 +11,7 @@ dependencies:
   flutter:
     sdk: flutter
   http: ^1.6.0
-  provider: ^6.0.5
+  provider: ^6.1.5+1
   dio: ^5.1.2
   cupertino_icons: ^1.0.8
   google_fonts: ^5.0.0
@@ -27,6 +27,11 @@ dependencies:
   webview_flutter: ^4.4.0
   webview_flutter_android: ^4.10.9
   webview_flutter_wkwebview: ^3.7.0
+  flutter_tts: ^4.2.3
+  speech_to_text: ^7.3.0
+  flutter_2fa: ^1.0.4
+  shared_preferences: ^2.2.0
+
   
 
 dev_dependencies:

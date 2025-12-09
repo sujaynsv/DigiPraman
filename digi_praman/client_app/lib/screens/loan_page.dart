@@ -6,11 +6,12 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:path_provider/path_provider.dart';
 import './loan_verification_page.dart';
 import '../services/api_service.dart';
-import './verification_placeholder_page.dart';
+
 import './user_profile_page.dart';
 import './application_tracking_page.dart';
 import './video_call_page.dart';
 
+ import '../widgets/floating_chatbot.dart';
 
 
 class LoansPage extends StatefulWidget {
@@ -92,11 +93,13 @@ class _LoansPageState extends State<LoansPage> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
+@override
+Widget build(BuildContext context) {
+  return FloatingChatbot(
+    child: Scaffold(
       backgroundColor: Colors.grey.shade100,
       body: FutureBuilder<Map<String, dynamic>>(
+
         future: _summaryFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -211,6 +214,7 @@ class _LoansPageState extends State<LoansPage> {
           );
         },
       ),
+    )
     );
   }
 
@@ -765,4 +769,9 @@ Widget _buildLoanCard(Map<String, dynamic> loan) {
       },
     );
   }
+
+ 
+
+
+
 }

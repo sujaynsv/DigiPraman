@@ -227,23 +227,37 @@ class _LoanVerificationPageState extends State<LoanVerificationPage> {
     }
   }
 
-  Future<void> _submitVerification() async {
-    setState(() {
-      _uploading = true;
-    });
+Future<void> _submitVerification() async {
+  setState(() {
+    _uploading = true;
+  });
 
-    try {
-      await ApiService.submitVerification(widget.loanRefNo);
-      _showSuccess('Verification submitted successfully');
-      Navigator.pop(context);
-    } catch (e) {
-      _showError('Failed to submit verification');
-    } finally {
-      setState(() {
-        _uploading = false;
-      });
-    }
+  try {
+    // 1) Submit verification evidence to your main backend
+    await ApiService.submitVerification(widget.loanRefNo);
+
+    // 2) Trigger VIDYA AI risk scoring for this loan
+    final vidyaResult = await ApiService.runVidyaForLoanRef(widget.loanRefNo);
+
+    // You can inspect vidyaResult['risk_tier'], ['final_risk_score'], etc.
+    final riskTier = vidyaResult['risk_tier'] ?? 'unknown';
+    final riskScore = vidyaResult['final_risk_score']?.toString() ?? '-';
+
+    _showSuccess(
+      'Verification submitted.\nRisk tier: $riskTier (score $riskScore)',
+    );
+
+    // Optionally: refresh previous screen's data instead of direct pop
+    Navigator.pop(context, vidyaResult);
+  } catch (e) {
+    _showError('Failed to submit verification or run risk checks');
+  } finally {
+    setState(() {
+      _uploading = false;
+    });
   }
+}
+
 
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
