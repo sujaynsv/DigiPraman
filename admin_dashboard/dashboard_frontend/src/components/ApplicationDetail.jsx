@@ -1,147 +1,187 @@
-import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { getApplicationDetail } from '../api/axios';
-import './ApplicationDetail.css';
+import { useEffect, useState } from "react";
+import { useParams } from "react-router-dom";
+import "../components/ApplicationDetail.css";
+import api from "../api/axios";
 
-const numberFormatter = new Intl.NumberFormat('en-IN');
-
-const formatCurrency = (value) => {
-  if (value === null || value === undefined || Number.isNaN(Number(value))) {
-    return '—';
-  }
-  return `₹${numberFormatter.format(Number(value))}`;
-};
-
-const formatDate = (iso) => {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString('en-GB', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  });
-};
-
-function ApplicationDetail() {
+export default function ApplicationDetail() {
   const { id } = useParams();
   const [data, setData] = useState(null);
+  const [activeTab, setActiveTab] = useState("details");
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
 
   useEffect(() => {
-    async function load() {
-      try {
-        setLoading(true);
-        setError('');
-        const res = await getApplicationDetail(id);
-        setData(res.data);
-      } catch (err) {
-        console.error('Error loading application detail', err);
-        setError('Unable to load application details.');
-      } finally {
-        setLoading(false);
-      }
+    fetchApplication();
+  }, []);
+
+  const fetchApplication = async () => {
+    try {
+      const res = await api.get(`/applications/${id}`);
+      setData(res.data);
+    } catch (err) {
+      console.error("Error fetching details:", err);
+    } finally {
+      setLoading(false);
     }
-    load();
-  }, [id]);
+  };
 
-  if (loading) {
-    return <div className="app-detail"><p>Loading application…</p></div>;
-  }
+  // 🔥 Update Status API
+  const handleAction = async (action) => {
+    try {
+      const res = await api.post(`/applications/${id}/status`, { action });
+      const newStatus = res.data.status;
 
-  if (error || !data) {
-    return <div className="app-detail"><p className="error">{error || 'Application not found.'}</p></div>;
-  }
+      setData((prev) => ({
+        ...prev,
+        status: newStatus,
+        lifecycle_status: newStatus,
+      }));
 
-  const riskTier = data.risk?.tier || 'Medium';
-  const riskScore = data.risk?.score;
-  const breakdown = data.risk?.breakdown || [];
+      alert(`Status updated to: ${newStatus}`);
+    } catch (err) {
+      console.error("Update failed:", err);
+      alert("Failed to update status");
+    }
+  };
+
+  if (loading) return <h2 style={{ textAlign: "center" }}>Loading...</h2>;
+  if (!data) return <h2 style={{ textAlign: "center", color: "red" }}>Unable to load application details</h2>;
+
+  const status = (data.status || data.lifecycle_status || "").toLowerCase();
+  const riskTier = (data.risk?.tier || "Medium").toLowerCase();
+  const showActions = !["approved", "rejected"].includes(status);
 
   return (
-    <div className="app-detail">
-      {/* Top bar with back + title */}
-      <header className="app-detail-header">
-        <div>
-          <Link to="/applications" className="back-link">← Back to Applications</Link>
-          <h1 className="app-detail-title">{data.loan_ref_no}</h1>
-          <p className="app-detail-subtitle">{data.beneficiary_name}</p>
+    <div className="app-detail-container">
+
+      {/* Header */}
+      <div className="app-header-row">
+        <h1>{data.loan_ref_no}</h1>
+        <span className={`risk-badge ${riskTier}`}>
+          {data.risk?.tier || "Medium"} Risk
+        </span>
+      </div>
+
+      <p className="beneficiary-name">{data.beneficiary?.name}</p>
+
+      {/* Summary Cards */}
+      <div className="app-summary-grid">
+        <div className="card-box">
+          <label>Loan Amount</label>
+          <h3>₹{data.loan_amount}</h3>
+          <p>{data.loan_type}</p>
         </div>
-        <div>
-          <span className={`risk-pill ${riskTier.toLowerCase()}`}>{riskTier || 'Risk'}</span>
+
+        <div className="card-box">
+          <label>Risk Score</label>
+          <h3>{data.risk?.score ? `${data.risk.score}/100` : "N/A/100"}</h3>
         </div>
-      </header>
 
-      {/* Summary cards */}
-      <section className="app-detail-summary">
-        <article className="summary-card">
-          <h3>Loan Amount</h3>
-          <p className="summary-value">{formatCurrency(data.sanctioned_amount)}</p>
-          <p className="summary-caption">{data.loan_type || '—'}</p>
-        </article>
+        <div className="card-box">
+          <label>Contact</label>
+          <h3>{data.beneficiary?.mobile}</h3>
+          <p>{data.beneficiary?.email}</p>
+        </div>
 
-        <article className="summary-card">
-          <h3>Risk Score</h3>
-          <p className="summary-value">
-            {riskScore !== null && riskScore !== undefined ? `${riskScore}/100` : '—'}
-          </p>
-          <p className="summary-caption">{riskTier || 'Risk Category'}</p>
-        </article>
+        <div className="card-box">
+          <label>Submitted</label>
+          <h3>{data.submitted_at?.split("T")[0] || "-"}</h3>
+        </div>
+      </div>
 
-        <article className="summary-card">
-          <h3>Contact</h3>
-          <p className="summary-value">{data.beneficiary_mobile || '—'}</p>
-          <p className="summary-caption">{data.beneficiary_email || 'Contact details'}</p>
-        </article>
+      {/* Tabs */}
+      <div className="tab-buttons">
+        {["details", "evidence", "risk", "history"].map((tab) => (
+          <button
+            key={tab}
+            className={activeTab === tab ? "active" : ""}
+            onClick={() => setActiveTab(tab)}
+          >
+            {tab.charAt(0).toUpperCase() + tab.slice(1)}
+          </button>
+        ))}
+      </div>
 
-        <article className="summary-card">
-          <h3>Submitted</h3>
-          <p className="summary-value">{formatDate(data.created_at)}</p>
-          <p className="summary-caption">{data.lifecycle_status || 'Status'}</p>
-        </article>
-      </section>
+      {/* ---------- DETAILS TAB ---------- */}
+      {activeTab === "details" && (
+        <div className="tab-section">
+          <h3>Application Details</h3>
+          <p><strong>Beneficiary:</strong> {data.beneficiary?.name}</p>
+          <p><strong>Mobile:</strong> {data.beneficiary?.mobile}</p>
+          <p><strong>Email:</strong> {data.beneficiary?.email}</p>
+          <p><strong>Loan Type:</strong> {data.loan_type}</p>
+          <p><strong>Amount:</strong> ₹{data.loan_amount}</p>
+          <p><strong>Status:</strong> {data.status}</p>
+          <p><strong>Purpose:</strong> {data.purpose || "N/A"}</p>
+        </div>
+      )}
 
-      {/* Tabs bar – only Risk Analysis active for now */}
-      <nav className="app-detail-tabs">
-        <button className="tab-btn">Details</button>
-        <button className="tab-btn">Evidence</button>
-        <button className="tab-btn active">Risk Analysis</button>
-        <button className="tab-btn">History</button>
-      </nav>
+      {/* ---------- EVIDENCE TAB ---------- */}
+      {activeTab === "evidence" && (
+        <div className="tab-section">
+          <h3>Evidence</h3>
 
-      {/* Risk breakdown section */}
-      <section className="app-detail-panel">
-        <h2 className="panel-title">Risk Breakdown</h2>
+          {(!data.evidence || data.evidence.length === 0) && (
+            <p className="no-evidence">No evidence uploaded</p>
+          )}
 
-        <div className="risk-breakdown-list">
-          {breakdown.map((item) => (
-            <div key={item.key} className="risk-breakdown-row">
-              <div className="risk-breakdown-label">
-                <span>{item.label}</span>
-                <span>{item.score ?? 0}/100</span>
+          <div className="evidence-grid">
+            {data.evidence?.map((item, index) => (
+              <div key={index} className="evidence-card">
+                {item.file_type?.includes("image") ? (
+                  <img
+                    src={item.base64}
+                    alt="evidence"
+                    onClick={() => window.open(item.base64)}
+                  />
+                ) : (
+                  <a href={item.base64} download={item.file_name} target="_blank" rel="noreferrer">
+                    📄 {item.file_name}
+                  </a>
+                )}
               </div>
-              <div className="risk-breakdown-bar">
-                <div
-                  className="risk-breakdown-bar-value"
-                  style={{ width: `${Math.min(item.score || 0, 100)}%` }}
-                />
-              </div>
-            </div>
-          ))}
-          {breakdown.length === 0 && (
-            <p className="empty-state">No risk breakdown available for this application.</p>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ---------- RISK TAB ---------- */}
+      {activeTab === "risk" && (
+        <div className="tab-section">
+          <h3>Risk Analysis</h3>
+          <p><strong>Risk Score:</strong> {data.risk?.score || "N/A"}</p>
+          <p><strong>Tier:</strong> {data.risk?.tier || "Medium"}</p>
+
+          <pre className="risk-json">
+            {JSON.stringify(data.risk?.breakdown, null, 2)}
+          </pre>
+        </div>
+      )}
+
+      {/* ---------- HISTORY TAB ---------- */}
+      {activeTab === "history" && (
+        <div className="tab-section">
+          <h3>History</h3>
+          <p>Timeline logs will appear here.</p>
+        </div>
+      )}
+
+      {/* ---------- ACTION BUTTONS ---------- */}
+      {showActions && (
+        <div className="action-buttons">
+          <button className="approve" onClick={() => handleAction("approve")}>Approve</button>
+          <button className="request" onClick={() => handleAction("needs_more")}>Request More Info</button>
+          <button className="reject" onClick={() => handleAction("reject")}>Reject</button>
+
+          {riskTier === "high" && (
+            <button
+              onClick={() => window.open(`/jitsi/${data.id}`, "_blank")}
+              className="video-btn"
+            >
+              Start Video Verification 🔴
+            </button>
           )}
         </div>
-      </section>
-
-      {/* Actions */}
-      <section className="app-detail-actions">
-        <button className="primary-action">Approve</button>
-        <button className="secondary-action">Request More Info</button>
-        <button className="danger-action">Reject</button>
-      </section>
+      )}
     </div>
   );
 }
-
-export default ApplicationDetail;

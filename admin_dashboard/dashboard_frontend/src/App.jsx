@@ -6,8 +6,10 @@ import Users from './components/Users';
 import Schemes from './components/Schemes';
 import ApplicationDetail from './components/ApplicationDetail';
 import { Routes, Route, useLocation } from 'react-router-dom';
+
 import './App.css';
 
+import JitsiMeetComponent from "./components/JitsiMeetComponent";
 function App() {
   const location = useLocation();
 
@@ -30,6 +32,8 @@ function App() {
           <Route path="/organizations" element={<Organizations />} />
           <Route path="/users" element={<Users />} />
           <Route path="/schemes" element={<Schemes />} />
+          <Route path="/jitsi" element={<JitsiMeetComponent />} />
+          <Route path="/jitsi/:id" element={<JitsiMeetComponent />} />
         </Routes>
       </main>
     </div>

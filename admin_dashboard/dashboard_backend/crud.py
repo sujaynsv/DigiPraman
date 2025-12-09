@@ -399,6 +399,7 @@ from uuid import UUID
 from datetime import datetime, timedelta
 import models
 import schemas
+from sqlalchemy.exc import SQLAlchemyError 
 
 # =====================================================
 # ORGANIZATION CRUD
@@ -794,3 +795,48 @@ def get_application_detail(db: Session, application_id: UUID):
         "risk_tier": row["risk_tier"],
         "scores": row["scores"] or {},   # JSON with breakdown (authenticity, etc.)
     }
+
+def update_application_status(
+    db: Session,
+    application_id: UUID,
+    action: str,
+) -> Optional[models.LoanApplication]:
+    """
+    Update lifecycle_status of a loan application based on a simple action keyword.
+    Uses existing loan_applications table only – NO schema change.
+    """
+    normalized = (action or "").strip().lower()
+
+    # Map high-level actions to lifecycle_status values in your DB
+    if normalized == "approve":
+        new_status = "approved"
+    elif normalized in ("reject", "rejected"):
+        new_status = "rejected"
+    elif normalized in ("needs_more", "request_more", "request_more_info", "more_info"):
+        # use whatever you already use in loan_applications.lifecycle_status
+        new_status = "verification_required"
+    else:
+        # Unknown action – let the API handler return 400
+        raise ValueError(f"Unsupported action '{action}'")
+
+    # Fetch the loan application row
+    app_row = (
+        db.query(models.LoanApplication)
+        .filter(models.LoanApplication.id == application_id)
+        .first()
+    )
+
+    if not app_row:
+        return None
+
+    # Update status
+    app_row.lifecycle_status = new_status
+
+    try:
+        db.commit()
+    except SQLAlchemyError:
+        db.rollback()
+        raise
+
+    db.refresh(app_row)
+    return app_row

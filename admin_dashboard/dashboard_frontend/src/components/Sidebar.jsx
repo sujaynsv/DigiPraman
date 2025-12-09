@@ -9,12 +9,13 @@ function Sidebar({ currentView }) {
     { id: 'organizations', label: 'Organizations', icon: <FaBuilding />, to: '/organizations' },
     { id: 'users', label: 'Beneficiaries', icon: <FaUsers />, to: '/users' },
     { id: 'schemes', label: 'Schemes', icon: <FaClipboardList />, to: '/schemes' },
+    { id: 'jitsi', label: 'Jitsi', icon: <FaClipboardList />, to: '/jitsi' },
   ];
 
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
-        <h2>📊 DigiPraman</h2>
+        <h2>DigiPraman</h2>
       </div>
       <nav className="sidebar-nav">
         {menuItems.map((item) => (

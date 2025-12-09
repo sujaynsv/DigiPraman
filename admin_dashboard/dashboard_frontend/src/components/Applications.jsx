@@ -222,14 +222,13 @@ function Applications() {
                   <p className="cell-primary">{row.submitted}</p>
                 </div>
                 <div>
-                    <a
+                    <button
                       className="view-link"
-                      href={`/applications/${row.key}`}
-                      target="_blank"
-                      rel="noreferrer"
+                      onClick={() => window.open(`/applications/${row.key}`, "_blank")}
                     >
                       View
-                    </a>
+                    </button>
+
                   </div>
 
 

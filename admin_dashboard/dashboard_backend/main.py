@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from uuid import UUID
-
+from pydantic import BaseModel
 import models
 import schemas
 import crud
@@ -17,7 +17,9 @@ app = FastAPI(
     title="Admin Dashboard Backend API",
     description="Backend API for Loan Verification Admin Dashboard",
     version="1.0.0"
+
 )
+
 
 # ============================================
 # CORS MIDDLEWARE - MUST BE FIRST!
@@ -282,3 +284,56 @@ def get_application_detail(application_id: UUID, db: Session = Depends(get_db)):
     except Exception as e:
         print(f"❌ Error loading application detail: {e}")
         raise HTTPException(status_code=500, detail="Unable to load application detail")
+
+
+from fastapi import HTTPException
+from pydantic import BaseModel
+
+class StatusUpdate(BaseModel):
+    status: str   # approved / rejected / pending / verification-required etc.
+
+
+@app.put("/applications/{app_id}/status")
+def update_status(app_id: str, data: StatusUpdate, db: Session = Depends(get_db)):
+    app = db.query(models.loan_applications).filter(models.loan_applications.id == app_id).first()
+    if not app:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    app.lifecycle_status = data.status
+    db.commit()
+    db.refresh(app)
+    return {"message": "Status updated successfully", "status": app.lifecycle_status}
+
+
+class ApplicationStatusPayload(BaseModel):
+    action: str  # "approve", "reject", "needs_more"
+    
+
+@app.post("/applications/{application_id}/status")
+def application_status_action(
+    application_id: UUID,
+    payload: ApplicationStatusPayload,
+    db: Session = Depends(get_db),
+):
+    """
+    Approve / Reject / Request-more-info for a single loan application.
+
+    It only updates loan_applications.lifecycle_status using your existing schema.
+    """
+    try:
+        updated = crud.update_application_status(db, application_id, payload.action)
+    except ValueError as exc:
+        # unknown action
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        print(f"❌ Error updating status: {exc}")
+        raise HTTPException(status_code=500, detail="Failed to update status")
+
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    # respond with the new status so frontend can update UI
+    return {
+        "id": str(updated.id),
+        "status": updated.lifecycle_status,
+    }

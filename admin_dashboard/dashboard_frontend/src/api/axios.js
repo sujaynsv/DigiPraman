@@ -105,7 +105,13 @@ export const testConnection = () => {
 };
 
 
-export const getApplicationDetail = (id) =>
-  api.get(`/applications/${id}`);
+export const getApplicationDetails = (id) => api.get(`/applications/${id}`);
+
+
+export const getEvidenceByLoan = (loanId) =>
+  api.get(`/evidence/${loanId}`);  // You will create API route in backend if not exists
+
+export const updateStatus = (id, status) => api.put(`/applications/${id}/status`, { status });
+
 
 export default api;
