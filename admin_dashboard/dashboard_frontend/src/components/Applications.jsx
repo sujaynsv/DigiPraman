@@ -222,10 +222,16 @@ function Applications() {
                   <p className="cell-primary">{row.submitted}</p>
                 </div>
                 <div>
-                  <button type="button" className="view-link">
-                    View
-                  </button>
-                </div>
+                    <button
+                      className="view-link"
+                      onClick={() => window.open(`/applications/${row.key}`, "_blank")}
+                    >
+                      View
+                    </button>
+
+                  </div>
+
+
               </li>
             ))}
           </ul>
