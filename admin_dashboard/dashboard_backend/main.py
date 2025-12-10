@@ -340,10 +340,18 @@ def application_status_action(
 
 from twilio.rest import Client
 
-TWILIO_SID = "ACeb88fd71370823119bc77a9709bc9490"
-TWILIO_AUTH = "19667ac3efe9b95190046e4419e4163a"
-TWILIO_NUMBER = "+17076647532"  
+
 # MessagingServiceSid = "MG6c62893a41d7645a24f458f7cd8a75a1"
+
+import os
+from twilio.rest import Client
+
+TWILIO_SID = os.getenv("TWILIO_SID")
+TWILIO_AUTH = os.getenv("TWILIO_AUTH")
+TWILIO_NUMBER = os.getenv("TWILIO_NUMBER")
+
+if not all([TWILIO_SID, TWILIO_AUTH, TWILIO_NUMBER]):
+    raise RuntimeError("Twilio credentials not configured in environment variables")
 class MeetingRequest(BaseModel):
     app_id: str
 
